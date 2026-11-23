@@ -2,16 +2,16 @@
 // UI는 act(state, action)만 호출하고, 반환된 이벤트 배열로 연출/로그를 만든다.
 //
 // phase: 'player' | 'dealer' | 'call'(전화: 증강 선택) | 'shop' | 'gameOver' | 'victory'
-import { CONFIG, stageSpec } from './config.js?v=mwswysnb';
-import { createRng } from './rng.js?v=mwswysnb';
-import { loadChamber } from './chamber.js?v=mwswysnb';
-import { maxHp } from './charms.js?v=mwswysnb';
-import { runHook } from './hooks.js?v=mwswysnb';
-import { CHIPS, STARTING_POUCH, makeChip, allChips } from './chips.js?v=mwswysnb';
-import { ITEM_IDS } from './items.js?v=mwswysnb';
-import { AUGMENTS, BASE_MODS, rollCall } from './augments.js?v=mwswysnb';
-import { dealerDecide } from './dealer.js?v=mwswysnb';
-import * as shop from './shop.js?v=mwswysnb';
+import { CONFIG, stageSpec } from './config.js?v=mwsx9ehs';
+import { createRng } from './rng.js?v=mwsx9ehs';
+import { loadChamber } from './chamber.js?v=mwsx9ehs';
+import { maxHp } from './charms.js?v=mwsx9ehs';
+import { runHook } from './hooks.js?v=mwsx9ehs';
+import { CHIPS, STARTING_POUCH, makeChip, allChips } from './chips.js?v=mwsx9ehs';
+import { ITEM_IDS } from './items.js?v=mwsx9ehs';
+import { AUGMENTS, BASE_MODS, rollCall } from './augments.js?v=mwsx9ehs';
+import { dealerDecide } from './dealer.js?v=mwsx9ehs';
+import * as shop from './shop.js?v=mwsx9ehs';
 
 export const rngOf = (state) => createRng(state.rng);
 

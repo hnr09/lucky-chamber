@@ -2,12 +2,13 @@
 // - 방장(host, 자리 0)이 게임을 진행한다. 참가자는 들어온 순서대로 자리 1, 2, 3.
 // - 방장은 참가자마다 그 사람에게 보여줄 화면(viewFor: 탄 순서 없음, 자기 돋보기 결과만)을 따로 보낸다.
 // - 참가자는 자기 행동만 보낸다. 판정은 항상 방장.
+// - 조준(누구를 노리는지)은 게임 상태가 아닌 '시선' 정보: 차례인 사람이 보내면 방장이 모두에게 전달한다.
 //
 // hub(방장 쪽 연결): onJoin(fn(id)), onLeave(fn(id)), onMessage(fn(id, msg)), send(id, msg)
 // link(참가자 쪽 연결): onMessage(fn(msg)), send(msg)
-import { newVersus, actVersus, viewFor, eventsFor, forfeit, VS } from './versus.js?v=mwswysnb';
+import { newVersus, actVersus, viewFor, eventsFor, forfeit, VS } from './versus.js?v=mwsx9ehs';
 
-export function createOnlineHost({ hub, seed, onLobby, onUpdate }) {
+export function createOnlineHost({ hub, seed, onLobby, onUpdate, onGaze }) {
   const seats = ['host'];       // seats[i] = 연결 id (0은 방장)
   let state = null;
   let view = null;
@@ -18,6 +19,8 @@ export function createOnlineHost({ hub, seed, onLobby, onUpdate }) {
     onLobby?.({ ...lobbyInfo(), me: 0 });
   };
   const broadcast = (events) => {
+    // 쏘거나 차례가 바뀌면 시선 초기화
+    if (gaze && events.some((e) => e.type === 'shot' || e.type === 'turn' || e.type === 'roundStart' || e.type === 'eliminated')) { gaze = null; sendGaze(); }
     seats.forEach((id, i) => {
       if (i > 0 && id) hub.send(id, { t: 'state', me: i, view: viewFor(state, i), events: eventsFor(events, i) });
     });
@@ -38,8 +41,22 @@ export function createOnlineHost({ hub, seed, onLobby, onUpdate }) {
     const events = forfeit(state, i);
     broadcast(events);
   });
+  // 시선: 차례인 사람의 조준만 받아서 모두에게 알린다
+  let gaze = null;
+  const sendGaze = () => {
+    seats.forEach((id, i) => { if (i > 0 && id) hub.send(id, { t: 'gaze', gaze }); });
+    onGaze?.(gaze);
+  };
+  const setGaze = (seat, target) => {
+    if (!state || state.phase !== 'play' || state.turn !== seat) return;
+    const valid = target === null || (Number.isInteger(target) && target >= 0 && target < state.players && state.hp[target] > 0);
+    if (!valid) return;
+    gaze = target === null ? null : { from: seat, to: target };
+    sendGaze();
+  };
   hub.onMessage((id, msg) => {
     const i = seats.indexOf(id);
+    if (i > 0 && msg?.t === 'gaze') { setGaze(i, msg.target ?? null); return; }
     if (i <= 0 || !state || msg?.t !== 'act') return;
     const events = actVersus(state, i, msg.action);
     if (events.some((e) => e.type === 'invalid')) { hub.send(id, { t: 'state', me: i, view: viewFor(state, i), events }); return; }
@@ -59,6 +76,7 @@ export function createOnlineHost({ hub, seed, onLobby, onUpdate }) {
       broadcast(r.events);
       return true;
     },
+    aim(target) { setGaze(0, target); },
     act(action) {
       if (!state) return [{ type: 'invalid', reason: '아직 시작하지 않았다' }];
       const events = actVersus(state, 0, action);
@@ -69,7 +87,7 @@ export function createOnlineHost({ hub, seed, onLobby, onUpdate }) {
   };
 }
 
-export function createOnlineGuest({ link, onLobby, onUpdate, onRefused }) {
+export function createOnlineGuest({ link, onLobby, onUpdate, onRefused, onGaze }) {
   let view = null;
   let me = null;
   let pending = false;
@@ -77,6 +95,7 @@ export function createOnlineGuest({ link, onLobby, onUpdate, onRefused }) {
     if (!msg || typeof msg !== 'object') return;
     if (msg.t === 'lobby') { me = msg.me; onLobby?.(msg); }
     else if (msg.t === 'full') onRefused?.(msg.reason || '들어갈 수 없는 방이다');
+    else if (msg.t === 'gaze') onGaze?.(msg.gaze && Number.isInteger(msg.gaze.from) && Number.isInteger(msg.gaze.to) ? msg.gaze : null);
     else if (msg.t === 'state' && msg.view) {
       me = msg.me;
       view = msg.view;
@@ -88,6 +107,10 @@ export function createOnlineGuest({ link, onLobby, onUpdate, onRefused }) {
     get me() { return me; },
     get view() { return view; },
     get pending() { return pending; },
+    aim(target) {
+      if (!view || view.turn !== me) return;
+      link.send({ t: 'gaze', target });
+    },
     act(action) {
       if (pending) return [{ type: 'invalid', reason: '방장 응답을 기다리는 중' }];
       if (!view) return [{ type: 'invalid', reason: '아직 시작하지 않았다' }];

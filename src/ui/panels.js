@@ -1,12 +1,12 @@
 // 오버레이 패널: 상점 / 전화 / 게임 종료
-import { CONFIG, stageSpec } from '../core/config.js?v=mwswysnb';
-import { CHARMS } from '../core/charms.js?v=mwswysnb';
-import { CHIPS, allChips, betText } from '../core/chips.js?v=mwswysnb';
-import { ITEMS } from '../core/items.js?v=mwswysnb';
-import { GLYPH } from '../core/reels.js?v=mwswysnb';
-import { sellPrice, priceOf } from '../core/shop.js?v=mwswysnb';
-import { AUGMENTS } from '../core/augments.js?v=mwswysnb';
-import { TICKET_GOODS, boothPrice } from '../core/tickets.js?v=mwswysnb';
+import { CONFIG, stageSpec } from '../core/config.js?v=mwsx9ehs';
+import { CHARMS } from '../core/charms.js?v=mwsx9ehs';
+import { CHIPS, allChips, betText } from '../core/chips.js?v=mwsx9ehs';
+import { ITEMS } from '../core/items.js?v=mwsx9ehs';
+import { GLYPH } from '../core/reels.js?v=mwsx9ehs';
+import { sellPrice, priceOf } from '../core/shop.js?v=mwsx9ehs';
+import { AUGMENTS } from '../core/augments.js?v=mwsx9ehs';
+import { TICKET_GOODS, boothPrice } from '../core/tickets.js?v=mwsx9ehs';
 
 export function renderShop(state, toast) {
   const { shop: s, player: p } = state;

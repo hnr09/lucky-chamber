@@ -437,3 +437,22 @@ body.aiming .crosshair { border-color: #ffd84a; box-shadow: 0 0 14px #ffb000aa; 
   .hud-top.vs.n3, .hud-top.vs.n4 { grid-template-columns: repeat(2, 1fr) !important; }
   .vs-p small { font-size: 10px; }
 }
+
+/* ════════ 조준 → 발사 / 시선 ════════ */
+.aim-btn { background: linear-gradient(#3a1a14, #1a0a08) !important; font-size: 16px !important; }
+.aim-btn.self { background: linear-gradient(#2c2a28, #141212) !important; }
+.aim-btn.aimed { outline: 3px solid #ff3a2a; outline-offset: -3px; box-shadow: 0 0 18px #ff2a1a88, 0 5px 0 #000 !important; }
+.fire { font-family: var(--display); font-size: 24px; letter-spacing: 2px; padding: 12px; border-radius: 3px; color: #fff3e0;
+  background: var(--splat) left -10px top -8px / 110% auto no-repeat, linear-gradient(#b0140e, #5a0604); border: 3px solid #000;
+  box-shadow: 0 5px 0 #000, 0 0 22px #ff2a1a88; text-shadow: 2px 2px 0 #000; animation: cashpulse 1s ease-in-out infinite; }
+.fire small { display: block; font-family: "Courier New", monospace; font-size: 11px; letter-spacing: 0; color: #ffd8c8; }
+.fire:disabled { opacity: .45; animation: none; }
+.gaze-banner { align-self: center; margin-top: 8px; font-size: 15px; background: #1a0303e6; border: 2px solid #8e0b0b; padding: 5px 14px; border-radius: 4px;
+  box-shadow: 0 0 18px #ff1a0a66; animation: gazepulse 1.2s ease-in-out infinite; }
+.gaze-banner b { font-family: var(--display); font-weight: 400; font-size: 18px; letter-spacing: 1px; }
+@keyframes gazepulse { 50% { box-shadow: 0 0 28px #ff1a0aaa; } }
+.vs-p.targeted { border-color: #ff3a2a !important; box-shadow: inset 0 0 14px #5a0000, 0 0 16px #ff2a1a99 !important; }
+.vs-p.targeted::after { content: "🎯"; position: absolute; right: 6px; top: 4px; font-size: 14px; }
+.vs-p { position: relative; }
+body.targeted-me #hurt { animation: targeted 1.1s ease-in-out infinite; }
+@keyframes targeted { 0%, 100% { opacity: .25; } 50% { opacity: .7; } }

@@ -219,3 +219,26 @@ test('온라인: 참가자는 자기 차례가 아니면 보내지 않는다', a
   assert.equal(hostView.turn, 0);
   assert.equal(guest.act({ type: 'shoot', target: 0 })[0].type, 'invalid');
 });
+
+test('온라인 시선: 차례인 사람의 조준이 모두에게 보이고, 쏘면 사라진다', async () => {
+  const net = fakeNet();
+  let hostView, hostGaze;
+  const host = createOnlineHost({ hub: net.hub, seed: 11, onUpdate: (v) => { hostView = v; }, onGaze: (g) => { hostGaze = g; } });
+  const gz = [null, null];
+  const guests = [1, 2].map((k) => createOnlineGuest({ link: net.connect('g' + k), onGaze: (g) => { gz[k - 1] = g; } }));
+  await tick();
+  host.start();
+  await tick();
+  assert.equal(hostView.turn, 0);
+  host.aim(2);
+  await tick();
+  assert.deepEqual(gz[0], { from: 0, to: 2 });
+  assert.deepEqual(gz[1], { from: 0, to: 2 });
+  guests[0].aim(0); // 차례가 아닌 사람의 조준은 무시
+  await tick();
+  assert.deepEqual(hostGaze, { from: 0, to: 2 });
+  host.act({ type: 'shoot', target: 2 });
+  await tick();
+  assert.equal(hostGaze, null);
+  assert.equal(gz[1], null);
+});

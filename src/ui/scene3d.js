@@ -1,9 +1,9 @@
 // 3D 테이블 씬 (Three.js). 게임 규칙은 모르고, 상태를 그리고 이벤트를 연출만 한다.
 // 레트로 로우폴리 스타일: 저해상도 렌더 → 픽셀 확대, 플랫 셰이딩, 안개, 흔들리는 전등.
 import * as THREE from 'three';
-import { CHIPS } from '../core/chips.js?v=mwswysnb';
-import { CHARMS } from '../core/charms.js?v=mwswysnb';
-import { CONFIG } from '../core/config.js?v=mwswysnb';
+import { CHIPS } from '../core/chips.js?v=mwsx9ehs';
+import { CHARMS } from '../core/charms.js?v=mwsx9ehs';
+import { CONFIG } from '../core/config.js?v=mwsx9ehs';
 
 const PIXEL_SCALE = 3; // 클수록 더 도트처럼 보인다
 // 좌석: player(앞, 카메라) · dealer(맞은편) · left · right
@@ -746,6 +746,47 @@ export function createScene(canvas, { onChipClick, onHurt, onHover, onAim, onFir
     }
   });
 
+  // ── 시선: 차례인 사람이 누구를 노리는지 모두에게 보여준다 ──
+  // setGaze({ shooter: 좌석, target: 좌석 }) — 총을 들어 겨누고, 총구에서 대상 머리로 붉은 레이저.
+  // setGaze(null) 은 총을 내려놓는다. { keepGun: true } 면 레이저만 끈다 (바로 사격 연출이 이어질 때).
+  const laserGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(), new THREE.Vector3(0, 0, -1)]);
+  const laserMat = new THREE.LineBasicMaterial({ color: 0xff2a1a, transparent: true, opacity: 0.75 });
+  const laser = new THREE.Line(laserGeo, laserMat);
+  laser.visible = false;
+  scene.add(laser);
+  const laserDot = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 4), new THREE.MeshBasicMaterial({ color: 0xff3a2a }));
+  laserDot.visible = false;
+  scene.add(laserDot);
+  const muzzlePos = new THREE.Vector3();
+  let gaze = null;
+  let gazeKey = null;
+  function setGaze(g, { keepGun = false } = {}) {
+    const key = g ? `${g.shooter}>${g.target}` : null;
+    if (key === gazeKey) return;
+    gazeKey = key;
+    gaze = g;
+    const p0 = new THREE.Vector3(), q0 = new THREE.Quaternion();
+    if (!g) {
+      laser.visible = false;
+      laserDot.visible = false;
+      if (keepGun) return;
+      tween(0, 1, () => { p0.copy(gun.position); q0.copy(gun.quaternion); });
+      tween(0, 380, (k) => { const e = easeOut(k); gun.position.lerpVectors(p0, REST_POS, e); gun.quaternion.slerpQuaternions(q0, restQuat, e); });
+      return;
+    }
+    const from = g.target === g.shooter ? (SELF_FROM[g.shooter] ?? SELF_FROM.dealer) : (HOLD[g.shooter] ?? HOLD.dealer);
+    const q = aimQuat(from, AIM[g.target] ?? AIM.dealer);
+    tween(0, 1, () => { p0.copy(gun.position); q0.copy(gun.quaternion); });
+    tween(0, 350, (k) => { const e = easeInOut(k); gun.position.lerpVectors(p0, from, e); gun.quaternion.slerpQuaternions(q0, q, e); });
+  }
+  // 고개를 대상 쪽으로 돌릴 각도 (인물 좌표계 기준 yaw)
+  const tmpV = new THREE.Vector3();
+  function yawToward(group, target) {
+    tmpV.copy(target);
+    group.worldToLocal(tmpV);
+    return Math.atan2(tmpV.x, tmpV.z);
+  }
+
   // ── 조준 (PC): 마우스로 고개를 돌려 바라보는 사람을 쏜다 ──
   // setAim({ targets: [{ seat, id }], self: id }) — id는 호출하는 쪽 값(플레이어 번호 등). null이면 끈다.
   let aim = null;
@@ -836,6 +877,25 @@ export function createScene(canvas, { onChipClick, onHurt, onHover, onAim, onFir
       for (const e of f.eyes) e.scale.setScalar(f.alive ? 1 + f.aimed * 1.6 : 0.01);
     }
     dealerFx.slump += ((dealerFx.alive ? 0 : 1) - dealerFx.slump) * 0.05;
+    // 시선: 레이저와 고개 돌리기
+    if (gaze) {
+      muzzle.getWorldPosition(muzzlePos);
+      const tgt = AIM[gaze.target] ?? AIM.dealer;
+      const pos = laser.geometry.attributes.position;
+      pos.setXYZ(0, muzzlePos.x, muzzlePos.y, muzzlePos.z);
+      pos.setXYZ(1, tgt.x, tgt.y, tgt.z);
+      pos.needsUpdate = true;
+      laser.geometry.computeBoundingSphere();
+      laser.visible = true;
+      laserMat.opacity = 0.55 + Math.sin(tt * 12) * 0.2;
+      laserDot.position.copy(tgt);
+      laserDot.visible = gaze.target !== 'player';
+    }
+    for (const k of ['left', 'right']) {
+      const f = sideFigures[k];
+      const want = gaze && gaze.shooter === k && gaze.target !== k ? yawToward(f.group, AIM[gaze.target]) : 0;
+      f.head.rotation.y += (want - f.head.rotation.y) * 0.12;
+    }
     // 전화벨: 수화기가 덜덜 떨리고 빨간 불이 깜빡인다
     if (ringing) {
       const on = Math.sin(tt * 30) > 0 && (tt % 1.2) < 0.8;
@@ -853,7 +913,9 @@ export function createScene(canvas, { onChipClick, onHurt, onHover, onAim, onFir
     if (Math.random() < 0.006) { twitch.z = (Math.random() - 0.5) * 0.7; twitch.y = (Math.random() - 0.5) * 0.6; twitch.t = 1; }
     twitch.t *= 0.965;
     head.rotation.z += ((twitch.z * twitch.t) - head.rotation.z) * 0.35;
-    head.rotation.y = Math.sin(tt * 0.6) * 0.12 + twitch.y * twitch.t;
+    const dealerGazeYaw = gaze && gaze.shooter === 'dealer' && gaze.target !== 'dealer' ? yawToward(dealer, AIM[gaze.target]) : 0;
+    dealerFx.gazeYaw = (dealerFx.gazeYaw ?? 0) + (dealerGazeYaw - (dealerFx.gazeYaw ?? 0)) * 0.12;
+    head.rotation.y = Math.sin(tt * 0.6) * 0.12 + twitch.y * twitch.t + dealerFx.gazeYaw;
     head.position.y = 2.02 + Math.sin(tt * 1.1) * 0.012 - dealerFx.slump * 0.3;
     const lean = dealerTurn ? 1 : 0;
     leanK += (lean - leanK) * 0.05;
@@ -896,5 +958,5 @@ export function createScene(canvas, { onChipClick, onHurt, onHover, onAim, onFir
     }
   }
 
-  return { update, play, resize, celebrate, setAim };
+  return { update, play, resize, celebrate, setAim, setGaze };
 }

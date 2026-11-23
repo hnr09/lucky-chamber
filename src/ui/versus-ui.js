@@ -1,18 +1,18 @@
 // 홈 화면 + 결투(2~4명, 같은 기기 / 온라인) UI.
 // 3D 씬은 로그라이크와 같은 테이블: 나는 앞자리(player), 다른 사람들은 차례 순서대로 왼쪽 · 맞은편 · 오른쪽.
-// PC는 마우스로 바라보는 사람을 클릭해서 쏘고, 터치 기기는 대상별 버튼으로 쏜다.
-import { newVersus, actVersus, viewFor, VS } from '../core/versus.js?v=mwswysnb';
-import { createOnlineHost, createOnlineGuest } from '../core/online.js?v=mwswysnb';
-import { ITEMS } from '../core/items.js?v=mwswysnb';
-import { openPeerHub, openPeerLink, randomCode, normalizeCode } from './net-peer.js?v=mwswysnb';
+// 쏘기: 대상 버튼으로 조준 → 🔫 발사. 조준하는 순간 모두의 화면에 총구와 붉은 시선이 그 사람을 향한다.
+import { newVersus, actVersus, viewFor, VS } from '../core/versus.js?v=mwsx9ehs';
+import { createOnlineHost, createOnlineGuest } from '../core/online.js?v=mwsx9ehs';
+import { ITEMS } from '../core/items.js?v=mwsx9ehs';
+import { openPeerHub, openPeerLink, randomCode, normalizeCode } from './net-peer.js?v=mwsx9ehs';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const SEAT_ORDER = { 2: ['dealer'], 3: ['left', 'right'], 4: ['left', 'dealer', 'right'] };
 const SEAT_LABEL = { player: '앞', dealer: '맞은편', left: '왼쪽', right: '오른쪽' };
 const COLORS = ['#ffcf4a', '#7dff6a', '#ff6a5a', '#6ab8ff'];
 
-// PC(정밀한 포인터)는 조준 사격, 터치 기기는 버튼
-export const AIM_MODE = () => window.matchMedia?.('(pointer: fine)').matches ?? true;
+// 조준 사격(마우스로 바라보기)은 끄고 모든 기기에서 버튼을 쓴다. 대신 '시선'(누가 누구를 노리는지)을 모두에게 보여준다.
+export const AIM_MODE = () => false;
 
 export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, toggleMute, onSolo }) {
   let screen = 'home';     // 'home' | 'lobby' | 'versus' | 'off'
@@ -29,6 +29,7 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
   let lobby = { status: 'idle', code: '', error: '', joinCode: '', players: 1 };
   let disconnected = '';
   let aimId = null;
+  let gaze = null;         // { from, to } 차례인 사람이 노리는 대상
   let fxTimer = null;
 
   const locked = () => performance.now() < lockedUntil;
@@ -94,6 +95,8 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
 
   // who: 이벤트가 일어날 때의 시점 (같은 기기는 쏜 사람)
   function showEvents(events, v, who) {
+    if (events.some((e) => e.type === 'shot')) { gaze = null; scene.setGaze(null, { keepGun: true }); }
+    if (events.some((e) => e.type === 'roundStart')) gaze = null;
     const mapped = mapEvents(events, v, who);
     const duration = scene.play(mapped);
     playEvents(mapped, {});
@@ -124,6 +127,7 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
       if (v) {
         scene.update(sceneState(v), { betSlots: 0, seats: seatsConf(v) });
         scene.setAim(locked() ? null : aimConf(v));
+        if (!locked()) scene.setGaze(gaze && v.phase === 'play' && v.hp[gaze.to] > 0 ? { shooter: seatOf(gaze.from, v), target: seatOf(gaze.to, v) } : null);
       }
     } else scene.setAim(null);
     render();
@@ -139,6 +143,7 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
   // ── 같은 기기 ──
   function startLocal(n = localCount) {
     kind = 'local';
+    gaze = null;
     const r = newVersus(undefined, n);
     local = r.state;
     screen = 'versus';
@@ -161,6 +166,7 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
       host = createOnlineHost({
         hub: net,
         onLobby: (l) => { lobby.players = l.players; if (screen === 'lobby') { sfx.select(true); render(); } },
+        onGaze: (g) => { gaze = g; if (screen === 'versus') refresh(); },
         onUpdate: (v, ev) => {
           view = v;
           if (screen !== 'versus') { screen = 'versus'; disconnected = ''; }
@@ -191,6 +197,7 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
         link: net,
         onLobby: (l) => { me = l.me; lobby.players = l.players; render(); },
         onRefused: (reason) => { lobby.status = 'error'; lobby.error = reason; render(); },
+        onGaze: (g) => { gaze = g; if (screen === 'versus') { sfx.select(false); refresh(); } },
         onUpdate: (v, ev) => {
           me = guest.me;
           view = v;
@@ -210,6 +217,9 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
   function leave() {
     net?.close();
     net = host = guest = local = view = null;
+    gaze = null;
+    scene.setGaze(null);
+    document.body.classList.remove('targeted-me');
     screen = 'home';
     kind = null;
     disconnected = '';
@@ -220,6 +230,23 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
       { betSlots: 0 },
     );
     render();
+  }
+
+  // 조준: 차례인 사람이 대상을 고른다 (같은 대상을 다시 누르면 발사)
+  function aimAt(target) {
+    const v = currentView();
+    if (!v || !isMyTurn(v) || locked()) return;
+    const who = perspective(v);
+    if (gaze && gaze.from === who && gaze.to === target) return doAct({ type: 'shoot', target: target === who ? 'self' : target });
+    gaze = { from: who, to: target };
+    sfx.select(true);
+    if (kind === 'online') (host ?? guest).aim(target);
+    refresh();
+  }
+  function fire() {
+    const v = currentView();
+    if (!v || !gaze || gaze.from !== perspective(v)) return;
+    doAct({ type: 'shoot', target: gaze.to === gaze.from ? 'self' : gaze.to });
   }
 
   function doAct(action) {
@@ -233,6 +260,7 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
     const bad = events.find((e) => e.type === 'invalid');
     toast = bad ? bad.reason : '';
     if (bad) sfx.deny();
+    if (!bad && action.type === 'shoot') { gaze = null; scene.setGaze(null, { keepGun: true }); }
     if (kind === 'local' && !bad) { refresh(); showEvents(events, v, who); } else render();
   }
 
@@ -248,20 +276,20 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
       <div class="modes">
         <button class="mode solo" data-vact="solo"><b>🎲 혼자 하기</b><small>딜러와 8스테이지 로그라이크. 칩과 부적으로 큰 한 방을 노려라.</small></button>
         <div class="mode local">
-          <b>👥 같이 하기</b><small>한 기기에서 번갈아 쏘는 결투. 마지막까지 살아남은 사람이 판을 이긴다. 2판 먼저 이기면 승리.</small>
+          <b>👥 한 기기에서 같이 하기</b><small>폰 하나를 돌려가며 2~4명이 번갈아 쏜다. 마지막 생존자가 판을 이기고, 2판 먼저 이기면 승리.</small>
           <div class="online-row">${[2, 3, 4].map((n) => `<button data-vact="local" data-n="${n}">${n}명</button>`).join('')}</div>
         </div>
         <div class="mode online">
-          <b>🌐 온라인 대전</b><small>최대 ${VS.maxPlayers}명. 방을 만들고 코드를 친구에게 보내거나, 받은 코드로 들어간다.</small>
+          <b>🌐 온라인 방 (2~${VS.maxPlayers}명)</b><small>각자 자기 기기로. 방을 만들어 코드를 최대 ${VS.maxPlayers - 1}명에게 보내거나, 받은 코드로 들어간다.</small>
           <div class="online-row">
-            <button data-vact="host" ${busy ? 'disabled' : ''}>방 만들기</button>
+            <button data-vact="host" ${busy ? 'disabled' : ''}>방 만들기 (최대 ${VS.maxPlayers}명)</button>
             <input id="join-code" maxlength="8" placeholder="방 코드" value="${esc(lobby.joinCode)}" autocomplete="off" />
             <button data-vact="join" ${busy ? 'disabled' : ''}>참가</button>
           </div>
           ${lobby.error ? `<p class="err">${esc(lobby.error)}</p>` : ''}
         </div>
       </div>
-      <p class="tag small">${aiming() ? '🎯 PC: 마우스로 상대를 바라보고 클릭해서 쏜다' : '📱 터치: 버튼으로 대상을 골라 쏜다'}</p>
+      <p class="tag small">🎯 결투에서는 쏠 사람을 조준하면 모두에게 보인다. 노려보다가 마음을 바꿀 수도 있다.</p>
       <div class="home-meta">
         <button class="link" data-vact="manual">📖 설명서</button>
         <button class="link" data-vact="mute">${isMuted() ? '🔇 소리 켜기' : '🔊 소리'}</button>
@@ -325,7 +353,7 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
       : kind === 'local' ? `<b style="color:${COLORS[v.turn]}">P${v.turn + 1}</b> 차례`
       : v.turn === me ? '<b>내 차례</b>' : `<span class="wait">P${v.turn + 1} 고민 중…</span>`;
 
-    const plate = (p) => `<div class="plate vs-p ${v.phase === 'play' && v.turn === p ? 'on' : ''} ${v.hp[p] <= 0 ? 'out' : ''}">
+    const plate = (p) => `<div class="plate vs-p ${v.phase === 'play' && v.turn === p ? 'on' : ''} ${v.hp[p] <= 0 ? 'out' : ''} ${gaze && gaze.to === p && v.phase === 'play' ? 'targeted' : ''}">
       <small><b style="color:${COLORS[p]}">P${p + 1}</b>${p === who ? (kind === 'online' ? ' (나)' : ' · 지금 차례') : ` · ${SEAT_LABEL[seatOf(p, v)]}`}</small>
       <div>${v.hp[p] > 0 ? hearts(v.hp[p]) : '☠ 탈락'}</div>
       <small>배수 ×${v.heat[p]}${v.hollow[p] ? ' · 💥' : ''} · ${winDots(v.wins[p])}</small>
@@ -351,16 +379,23 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
       </div></div>`;
     }
 
-    // 터치 기기: 대상별 버튼
+    // 쏘기: 대상 버튼으로 조준 → 🔫 발사 (같은 대상 버튼을 한 번 더 눌러도 발사)
     const targets = Array.from({ length: v.players }, (_, p) => p).filter((p) => p !== who && v.hp[p] > 0);
-    const buttons = aiming() ? '' : `<div class="actions vs-actions">
-        ${targets.map((p) => `<button class="shoot dealer-btn" data-vact="shoot" data-target="${p}" ${busy ? 'disabled' : ''}><span style="color:${COLORS[p]}">P${p + 1}</span> 쏘기<small>${SEAT_LABEL[seatOf(p, v)]} · 실탄이면 <b>피해 ${dmg}</b></small></button>`).join('')}
-        <button class="shoot self-btn" data-vact="shoot" data-target="self" ${busy ? 'disabled' : ''}>나를 쏜다<small>공포탄이면 <b>배수 ×${heat + 1}</b></small></button>
-      </div>`;
+    const myGaze = gaze && gaze.from === who && myTurn ? gaze.to : null;
+    const buttons = `<div class="actions vs-actions">
+        ${targets.map((p) => `<button class="shoot aim-btn ${myGaze === p ? 'aimed' : ''}" data-vact="aim" data-target="${p}" ${busy ? 'disabled' : ''}><span style="color:${COLORS[p]}">P${p + 1}</span> ${myGaze === p ? '조준 중' : '조준'}<small>${SEAT_LABEL[seatOf(p, v)]}</small></button>`).join('')}
+        <button class="shoot aim-btn self ${myGaze === who ? 'aimed' : ''}" data-vact="aim" data-target="${who}" ${busy ? 'disabled' : ''}>나 ${myGaze === who ? '조준 중' : '조준'}<small>공포탄이면 배수 ×${heat + 1}</small></button>
+      </div>
+      ${myGaze !== null ? `<button class="fire" data-vact="fire" ${busy ? 'disabled' : ''}>🔫 ${myGaze === who ? '나를' : `<span style="color:${COLORS[myGaze]}">P${myGaze + 1}</span>을`} 쏜다<small>${myGaze === who ? `공포탄이면 배수 ×${heat + 1} · 실탄이면 체력 -1` : `실탄이면 피해 ${dmg}`}</small></button>` : (myTurn ? '<p class="hint">쏠 사람을 골라 조준하자. 조준하면 모두에게 보인다.</p>' : '')}`;
+    // 시선: 누가 누구를 노리는지 (모두에게)
+    const gazeBanner = gaze && v.phase === 'play' && v.hp[gaze.to] > 0
+      ? `<div class="gaze-banner">🎯 <b style="color:${COLORS[gaze.from]}">${esc(nameOf(gaze.from))}</b> ${gaze.from === gaze.to ? '자기 머리에 총구를 댔다' : `→ <b style="color:${COLORS[gaze.to]}">${esc(nameOf(gaze.to))}</b> 노리는 중`}</div>`
+      : '';
 
     return `
     <header class="hud-top vs n${v.players}">${Array.from({ length: v.players }, (_, p) => plate(p)).join('')}</header>
     <div class="vs-round"><b>ROUND ${v.round}</b> · 2판 먼저 이기면 승리 · 약실 ${v.chamberNo}</div>
+    ${gazeBanner}
     ${aiming() && myTurn && !busy ? '<div class="crosshair"></div>' : ''}
     <section class="hud-bottom">
       <div class="odds">
@@ -396,6 +431,10 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
     else if (screen === 'lobby') app.innerHTML = renderLobby();
     else app.innerHTML = renderVersus();
     document.body.classList.toggle('aiming', aiming() && screen === 'versus' && aimId !== null);
+    // 누군가 나를 노리면 화면 가장자리가 붉게 맥동한다
+    const v = screen === 'versus' ? currentView() : null;
+    const who = v ? perspective(v) : -1;
+    document.body.classList.toggle('targeted-me', !!(v && gaze && v.phase === 'play' && gaze.to === who && gaze.from !== who));
   }
 
   function handleClick(btn) {
@@ -412,6 +451,8 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
       navigator.clipboard?.writeText(text).then(() => { toast = '초대 링크를 복사했다'; render(); }, () => { toast = text; render(); });
       return;
     }
+    if (vact === 'aim') return aimAt(Number(target));
+    if (vact === 'fire') return fire();
     if (vact === 'shoot') return doAct({ type: 'shoot', target: target === 'self' ? 'self' : Number(target) });
     if (vact === 'item') return doAct({ type: 'useItem', index: Number(index) });
     if (vact === 'next') return doAct({ type: 'nextRound' });
@@ -426,7 +467,7 @@ export function createVersusUI({ app, fxEl, scene, playEvents, sfx, isMuted, tog
   return {
     get screen() { return screen; },
     showHome() { screen = 'home'; scene.setAim(null); render(); },
-    hide() { screen = 'off'; scene.setAim(null); document.body.classList.remove('aiming'); },
+    hide() { screen = 'off'; scene.setAim(null); document.body.classList.remove('aiming', 'targeted-me'); },
     render,
     handleClick,
     handleKey,

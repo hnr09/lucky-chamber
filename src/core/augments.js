@@ -1,6 +1,6 @@
 // 증강: 스테이지를 클리어하면 전화가 울리고 3개 중 1개를 고른다. 런이 끝날 때까지 영구 적용.
 // 대부분 player.mods 수치를 올리는 방식이라 엔진 곳곳에서 mods만 읽으면 된다.
-import { CHIP_IDS, makeChip, allChips } from './chips.js?v=mwswysnb';
+import { CHIP_IDS, makeChip, allChips } from './chips.js?v=mwsx9ehs';
 
 export const BASE_MODS = { baseStake: 0, startHeat: 0, handSize: 0, maxHp: 0, discount: 0, reloadCoins: 0, ticketBonus: 0, betSlots: 0, chambers: 0 };
 
