@@ -2,12 +2,18 @@
 <html lang="ko">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Lucky Chamber</title>
   <link rel="stylesheet" href="styles.css" />
+  <script type="importmap">
+    { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+  </script>
 </head>
 <body>
+  <canvas id="scene"></canvas>
+  <div id="hurt"></div>
   <div id="app"></div>
+  <div class="crt"></div>
   <script type="module" src="src/ui/main.js"></script>
 </body>
 </html>
