@@ -7,7 +7,7 @@ import { createRng } from './rng.js';
 import { loadChamber } from './chamber.js';
 import { maxHp } from './charms.js';
 import { runHook } from './hooks.js';
-import { STARTING_POUCH, makeChip, allChips } from './chips.js';
+import { CHIPS, STARTING_POUCH, makeChip, allChips } from './chips.js';
 import { ITEM_IDS } from './items.js';
 import { AUGMENTS, BASE_MODS, rollCall } from './augments.js';
 import { dealerDecide } from './dealer.js';
@@ -43,15 +43,18 @@ export function newRun(seed = (Math.random() * 2 ** 32) >>> 0) {
 const HANDLERS = {
   shoot: {
     phases: ['player'],
-    // chip: 손패 인덱스(선택). 주면 그 칩을 이번 사격에 건다.
-    run(state, { target, chip }, events) {
+    // chips: 손패 인덱스 배열(선택, 고른 순서 = 발동 순서). chip: 한 개짜리 단축형.
+    run(state, { target, chip, chips }, events) {
       if (target !== 'dealer' && target !== 'self') return invalid(events, '대상이 잘못됨');
       const hand = state.player.pouch.hand;
-      if (chip !== undefined && chip !== null) {
-        if (!hand[chip]) return invalid(events, '손패에 없는 칩');
-        state.duel.bet = hand.splice(chip, 1)[0];
-        events.push({ type: 'bet', chip: state.duel.bet.type });
-      }
+      const picks = chips ?? (chip !== undefined && chip !== null ? [chip] : []);
+      if (new Set(picks).size !== picks.length) return invalid(events, '같은 칩을 두 번 걸 수 없다');
+      if (picks.length > betSlots(state)) return invalid(events, `한 번에 최대 ${betSlots(state)}개까지 걸 수 있다`);
+      if (picks.some((i) => !hand[i])) return invalid(events, '손패에 없는 칩');
+      const bets = picks.map((i) => hand[i]);
+      state.player.pouch.hand = hand.filter((_, i) => !picks.includes(i));
+      state.duel.bets = bets;
+      if (bets.length) events.push({ type: 'bet', chips: bets.map((c) => c.type) });
       fire(state, 'player', target === 'self' ? 'player' : 'dealer', events);
     },
   },
@@ -103,7 +106,7 @@ function startStage(state, events) {
   state.duel = {
     quota: spec.quota, score: 0, heat: 1,
     shells: [], spent: [], loaded: { live: 0, blank: 0 },
-    knownCurrent: null, empowered: false, chamberNo: 0, bet: null,
+    knownCurrent: null, empowered: false, chamberNo: 0, bets: [],
   };
   state.shop = null;
   // 스테이지마다 칩 주머니를 전부 모아서 다시 섞는다
@@ -156,24 +159,32 @@ function enterPlayerPhase(state, events) {
   if (drawn.length) events.push({ type: 'draw', chips: drawn });
 }
 
-// 건 칩의 사격 후 효과 처리 + 칩 이동(버린 더미 / 손패 복귀 / 파괴)
+// 한 번에 걸 수 있는 칩 수: 기본 + 스테이지 마일스톤/증강 보너스
+export function betSlots(state) {
+  return CONFIG.betSlots + state.player.mods.betSlots;
+}
+
+// 건 칩들의 사격 후 효과 처리 + 칩 이동(버린 더미 / 손패 복귀 / 파괴). 칩마다 따로 판정한다.
 function settleBet(state, { live, target, hit }, events) {
   const d = state.duel;
-  const chip = d.bet;
-  if (!chip) return;
-  const ctx = { live, target, hit, coins: 0, destroy: false, returnToHand: false, state, rng: rngOf(state) };
-  const triggers = runHook(state, 'onShotEnd', ctx);
-  d.bet = null;
+  const bets = d.bets;
+  d.bets = [];
   const pouch = state.player.pouch;
-  if (ctx.coins) state.player.coins += ctx.coins;
-  if (ctx.destroy) {
-    events.push({ type: 'chipBroken', chip: chip.type, triggers });
-  } else if (ctx.returnToHand) {
-    pouch.hand.push(chip);
-    events.push({ type: 'chipReturned', chip: chip.type, triggers });
-  } else {
-    pouch.discard.push(chip);
-    if (triggers.length) events.push({ type: 'chipEffect', chip: chip.type, coins: ctx.coins, triggers });
+  for (const chip of bets) {
+    const def = CHIPS[chip.type];
+    const ctx = { live, target, hit, coins: 0, destroy: false, returnToHand: false, state, rng: rngOf(state) };
+    const label = def.onShotEnd?.(ctx);
+    const triggers = label ? [{ id: chip.type, source: 'chip', name: def.name, icon: def.icon, label }] : [];
+    if (ctx.coins) state.player.coins += ctx.coins;
+    if (ctx.destroy) {
+      events.push({ type: 'chipBroken', chip: chip.type, triggers });
+    } else if (ctx.returnToHand) {
+      pouch.hand.push(chip);
+      events.push({ type: 'chipReturned', chip: chip.type, triggers });
+    } else {
+      pouch.discard.push(chip);
+      if (triggers.length) events.push({ type: 'chipEffect', chip: chip.type, coins: ctx.coins, triggers });
+    }
   }
 }
 
@@ -277,7 +288,10 @@ function checkEnd(state, events) {
   state.player.tickets += tickets;
   // 클리어 보상: 기본 칩(화이트) 지급
   for (let i = 0; i < CONFIG.clearGiftChips; i++) state.player.pouch.discard.push(makeChip(state, 'white'));
-  events.push({ type: 'stageClear', tickets, giftChips: CONFIG.clearGiftChips, stage: state.stage, score: d.score, quota: d.quota, base: spec.reward, bonus, coins: ctx.coins, triggers });
+  // 마일스톤 스테이지를 깨면 베팅 칸 +1
+  const slotUp = CONFIG.betSlotMilestones.includes(state.stage);
+  if (slotUp) state.player.mods.betSlots += 1;
+  events.push({ type: 'stageClear', tickets, giftChips: CONFIG.clearGiftChips, slotUp, betSlots: betSlots(state), stage: state.stage, score: d.score, quota: d.quota, base: spec.reward, bonus, coins: ctx.coins, triggers });
 
   if (state.stage >= CONFIG.finalStage) {
     state.phase = 'victory';

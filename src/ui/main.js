@@ -1,8 +1,8 @@
 // UI 컨트롤러: 엔진에 행동을 보내고, 3D 씬과 HTML HUD를 갱신한다.
-import { newRun, act } from '../core/engine.js';
+import { newRun, act, betSlots } from '../core/engine.js';
 import { CONFIG } from '../core/config.js';
 import { CHARMS, maxHp } from '../core/charms.js';
-import { CHIPS, betText } from '../core/chips.js';
+import { CHIPS, betText, previewBets } from '../core/chips.js';
 import { ITEMS } from '../core/items.js';
 import { AUGMENTS } from '../core/augments.js';
 import { describe } from './describe.js';
@@ -19,7 +19,7 @@ let state;
 let log = [];
 let flash = null;
 let toast = '';
-let selectedChip = null;
+let selectedChips = []; // 고른 손패 인덱스 (고른 순서 = 발동 순서)
 let showLog = false;
 let showPay = window.innerWidth > 1000;
 let lockedUntil = 0;   // 연출 중에는 입력을 막는다
@@ -57,7 +57,7 @@ function start(seed) {
   log = [];
   flash = null;
   toast = '';
-  selectedChip = null;
+  selectedChips = [];
   lockedUntil = 0;
   record(r.events);
   refresh();
@@ -70,14 +70,17 @@ function locked() {
 
 function selectChip(i) {
   if (state.phase !== 'player' || locked() || !state.player.pouch.hand[i]) return;
-  selectedChip = selectedChip === i ? null : i;
+  if (selectedChips.includes(i)) selectedChips = selectedChips.filter((x) => x !== i);
+  else if (selectedChips.length < betSlots(state)) selectedChips = [...selectedChips, i];
+  else { toast = `한 번에 최대 ${betSlots(state)}개까지 걸 수 있다`; return render(); }
+  toast = '';
   refresh();
 }
 
 function dispatch(action) {
   if (action.type === 'shoot') {
-    action.chip = selectedChip ?? undefined;
-    selectedChip = null;
+    action.chips = selectedChips;
+    selectedChips = [];
   }
   const events = act(state, action);
   const bad = events.find((e) => e.type === 'invalid');
@@ -112,7 +115,7 @@ function record(events) {
 }
 
 function refresh() {
-  scene.update(state, { selectedChip });
+  scene.update(state, { selectedChips, betSlots: betSlots(state) });
   render();
 }
 
@@ -125,7 +128,10 @@ function render() {
   const { player: p, dealer, duel: d } = state;
   const busy = state.phase !== 'player' || locked();
   const pct = Math.min(100, (d.score / d.quota) * 100);
-  const sel = selectedChip !== null ? p.pouch.hand[selectedChip] : null;
+  const picked = selectedChips.map((i) => p.pouch.hand[i]).filter(Boolean);
+  const baseStake = CONFIG.baseHitStake + p.mods.baseStake;
+  const pv = previewBets(picked.map((c) => c.type), { stake: baseStake, mult: d.heat });
+  const slots = betSlots(state);
 
   app.innerHTML = `
   <header class="hud-top">
@@ -137,7 +143,7 @@ function render() {
       <div class="dealer-hp"><small>딜러</small>${pips(dealer.hp, dealer.maxHp, 'hp dealer')}</div>
     </div>
   <div class="plate formula ${state.phase === 'call' || state.phase === 'shop' ? 'away' : ''}">
-    <span class="stake">${CONFIG.baseHitStake + p.mods.baseStake}${sel ? '+' : ''}</span><span class="x">×</span><span class="mult">${d.heat}</span>
+    <span class="stake">${pv.stake}</span><span class="x">×</span><span class="mult">${pv.mult}</span>${picked.length ? `<span class="eq">= ${pv.points}</span>` : ''}
     <small>장전 #${d.chamberNo} · 실탄 ${d.loaded.live} · 공포탄 ${d.loaded.blank} · 남은 ${d.shells.length}${d.empowered ? ' · 💥강화' : ''}</small>
   </div>
     <div class="plate money"><b class="coin">${p.coins}<small>¢</small></b><b class="ticket">${p.tickets}<small>🎟️</small></b></div>
@@ -150,10 +156,14 @@ function render() {
     <div class="charm-row">
       ${p.augments.map((id) => `<span class="aug" title="${AUGMENTS[id].name}: ${AUGMENTS[id].desc}">${AUGMENTS[id].icon}</span>`).join('')}
     </div>
-    <p class="chip-desc">${sel
-      ? `<b style="color:${CHIPS[sel.type].color}">${CHIPS[sel.type].icon} ${CHIPS[sel.type].name}</b> <span class="bet">${betText(CHIPS[sel.type].bet)}</span>${CHIPS[sel.type].ability ? ` · ${CHIPS[sel.type].ability}` : ''}`
+    <div class="chip-desc">${picked.length
+      ? `<div class="bet-head">베팅 ${picked.length}/${slots} <span class="seq">${picked.map((c) => CHIPS[c.type].icon).join('→')}</span> <small>고른 순서대로 발동 · 딜러 적중 시</small> <b class="pv">${pv.stake} × ${pv.mult} = ${pv.points}</b></div>
+         <ol class="bet-list">${picked.map((c) => {
+           const def = CHIPS[c.type];
+           return `<li><b style="color:${def.color}">${def.icon} ${def.name}</b> <span class="bet">${betText(def.bet)}</span>${def.ability ? ` <small>${def.ability}</small>` : ''}</li>`;
+         }).join('')}</ol>`
       : state.phase === 'dealer' ? '<span class="wait">딜러가 총을 집어 든다…</span>'
-      : `테이블의 칩을 눌러 베팅 · 주머니 ${p.pouch.draw.length} · 버림 ${p.pouch.discard.length}`}</p>
+      : `테이블의 칩을 눌러 최대 <b>${slots}개</b>까지 베팅 · 주머니 ${p.pouch.draw.length} · 버림 ${p.pouch.discard.length}`}</div>
     <div class="controls">
       <div class="me">
         <small>당신</small>
@@ -215,11 +225,11 @@ app.addEventListener('click', (ev) => {
   dispatch({ type, target, index: index !== undefined ? Number(index) : undefined, dir: dir !== undefined ? Number(dir) : undefined });
 });
 
-// 키보드: 1~5 칩 선택, D 딜러, S 자신
+// 키보드: 1~9 칩 선택(다시 누르면 취소), D 딜러, S 자신
 window.addEventListener('keydown', (ev) => {
   if (state.phase !== 'player' || locked()) return;
   const n = Number(ev.key);
-  if (n >= 1 && n <= 5) selectChip(n - 1);
+  if (n >= 1 && n <= 9) selectChip(n - 1);
   else if (ev.key === 'd' || ev.key === 'D') dispatch({ type: 'shoot', target: 'dealer' });
   else if (ev.key === 's' || ev.key === 'S') dispatch({ type: 'shoot', target: 'self' });
 });

@@ -5,8 +5,10 @@ export const CONFIG = {
   startCoins: 4,
   maxItems: 4,
   maxCharms: 5,
-  handSize: 3,          // 베팅 칩 손패 크기
-  minPouch: 4,          // 칩 주머니 최소 크기 (제거 서비스 한도)
+  handSize: 5,          // 베팅 칩 손패 크기
+  betSlots: 3,          // 한 번에 걸 수 있는 칩 수 (기본)
+  betSlotMilestones: [3, 6], // 이 스테이지를 깨면 베팅 칸 +1
+  minPouch: 5,          // 칩 주머니 최소 크기 (제거 서비스 한도)
   baseHitStake: 10,     // 딜러에게 실탄 적중 시 기본 판돈
   selfBlankStake: 5,    // 자신에게 공포탄을 쐈을 때 기본 판돈
   heatPerBlank: 1,      // 자신에게 공포탄 → 열기(배수) 증가량

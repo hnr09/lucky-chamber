@@ -43,14 +43,14 @@ test('증강 효과: 날 세우기 / 예열 / 넓은 손 / 강심장 / 수당', 
   s.duel.heat = 1;
   act(s, { type: 'shoot', target: 'dealer' });
   assert.equal(s.duel.score, 15); // (10+5) × 1
-  // 재장전 시 열기 2, 코인 +1, 손패 4
+  // 재장전 시 열기 2, 코인 +1, 손패 6
   s.phase = 'player';
   s.duel.shells = [false];
   const coins = s.player.coins;
   act(s, { type: 'shoot', target: 'self' });
   assert.equal(s.duel.heat, 2);
   assert.equal(s.player.coins, coins + 1);
-  assert.equal(s.player.pouch.hand.length, 4);
+  assert.equal(s.player.pouch.hand.length, 6);
 });
 
 test('조폐국: 화이트 칩이 고급 칩으로 바뀐다', () => {
@@ -91,4 +91,16 @@ test('단골 할인: 상점 가격 -1', () => {
   const id = s.shop.charms[0];
   act(s, { type: 'buyCharm', index: 0 });
   assert.equal(s.player.coins, 100 - (CHARMS[id].price - 1));
+});
+
+test('베팅 칸: 기본 3, 3스테이지 클리어 시 +1, 증강으로 +1', async () => {
+  const { betSlots } = await import('../src/core/engine.js');
+  const s = rigged([true]);
+  assert.equal(betSlots(s), 3);
+  s.stage = 3;
+  const ev = clearStage(s, { answer: false });
+  assert.ok(ev.find((e) => e.type === 'stageClear').slotUp);
+  assert.equal(betSlots(s), 4);
+  AUGMENTS.extraSlot.apply(s);
+  assert.equal(betSlots(s), 5);
 });

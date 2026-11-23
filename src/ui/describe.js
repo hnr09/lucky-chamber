@@ -28,7 +28,7 @@ export function describe(e) {
     case 'eject': return `배출된 탄: ${e.live ? '실탄' : '공포탄'}`;
     case 'empower': return '강화탄 장전 완료';
     case 'heal': return `체력 +${e.amount}`;
-    case 'stageClear': return `★ 스테이지 클리어! ${e.score}/${e.quota} · 코인 +${e.coins}${e.bonus ? ` (초과 보너스 ${e.bonus})` : ''} · 티켓 +${e.tickets} · ⚪화이트 칩 +${e.giftChips}${trig(e.triggers)}`;
+    case 'stageClear': return `★ 스테이지 클리어! ${e.score}/${e.quota} · 코인 +${e.coins}${e.bonus ? ` (초과 보너스 ${e.bonus})` : ''} · 티켓 +${e.tickets} · ⚪화이트 칩 +${e.giftChips}${e.slotUp ? ` · 🫴 베팅 칸 +1 (이제 ${e.betSlots}개)` : ''}${trig(e.triggers)}`;
     case 'phoneRing': return '📞 따르릉… 전화가 온다';
     case 'augment': return `증강: ${AUGMENTS[e.id].icon} ${AUGMENTS[e.id].name}`;
     case 'boughtBooth': return `티켓 교환: ${(e.kind === 'charm' ? CHARMS : TICKET_GOODS)[e.id].name} (-${e.price}🎟️)`;
@@ -36,7 +36,7 @@ export function describe(e) {
     case 'gameOver': return e.reason === 'dead' ? '☠ 사망' : `☠ 할당량 미달 (${e.score}/${e.quota})`;
     case 'victory': return '🏆 모든 스테이지 돌파!';
     case 'bought': return `구매: ${({ charm: CHARMS, item: ITEMS, chip: CHIPS })[e.kind][e.id].name} (-${e.price})`;
-    case 'bet': return `베팅: ${chip(e.chip)}`;
+    case 'bet': return `베팅: ${e.chips.map(chip).join(' → ')}`;
     case 'draw': return `칩 뽑기: ${e.chips.map((t) => CHIPS[t].icon).join(' ')}`;
     case 'pouchShuffle': return `버린 칩 ${e.count}개를 주머니에 다시 섞음`;
     case 'chipEffect': return `${chip(e.chip)}${trig(e.triggers)}`;

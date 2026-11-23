@@ -388,7 +388,7 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
   const brass = mat(0xc89a3c, { metalness: 0.7, roughness: 0.35 });
   const shellMats = { hidden: mat(0x3a3434), live: mat(0xb3261e), blank: mat(0x2c5d9e) };
 
-  const chipGeo = new THREE.CylinderGeometry(0.105, 0.105, 0.04, 20);
+  const chipGeo = new THREE.CylinderGeometry(0.095, 0.095, 0.04, 20);
   const chipMatCache = {};
   function chipMaterials(type) {
     if (chipMatCache[type]) return chipMatCache[type];
@@ -453,17 +453,28 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
     });
   }
 
-  function rebuildChips(pouch, selected) {
+  // 베팅 자리: 칸 수만큼 펠트 위에 원을 그린다. 고른 칩은 고른 순서대로 자리로 밀려 나간다.
+  const ringGeo = new THREE.RingGeometry(0.095, 0.11, 16);
+  const ringMat = new THREE.MeshBasicMaterial({ color: 0xc9a24a, transparent: true, opacity: 0.45 });
+  const BET_Z = 0.27;
+  const betX = (k, n) => (k - (n - 1) / 2) * 0.25;
+  function rebuildChips(pouch, selected, slots) {
     chipsGroup.clear();
     chipMeshes = [];
+    for (let k = 0; k < slots; k++) {
+      const ring = new THREE.Mesh(ringGeo, ringMat);
+      ring.rotation.x = -Math.PI / 2;
+      ring.position.set(betX(k, slots), 0.943, BET_Z);
+      chipsGroup.add(ring);
+    }
     const hand = pouch.hand;
-    const spacing = 0.27;
+    const spacing = 0.22;
     const x0 = -((hand.length - 1) * spacing) / 2;
     hand.forEach((chip, i) => {
       const m = new THREE.Mesh(chipGeo, chipMaterials(chip.type));
-      const sel = selected === i;
-      m.position.set(x0 + i * spacing, sel ? 1.06 : 0.96, 0.42);
-      m.rotation.x = sel ? 0.6 : 0;
+      const order = selected.indexOf(i);
+      if (order >= 0) m.position.set(betX(order, slots), 0.965, BET_Z);
+      else m.position.set(x0 + i * spacing, 0.96, 0.45);
       m.castShadow = true;
       m.userData = { kind: 'chip', id: chip.type, index: i };
       chipsGroup.add(m);
@@ -605,9 +616,9 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
     });
   }
 
-  function update(state, { selectedChip = null } = {}) {
+  function update(state, { selectedChips = [], betSlots = 3 } = {}) {
     rebuildShells(state.duel);
-    rebuildChips(state.player.pouch, selectedChip);
+    rebuildChips(state.player.pouch, selectedChips, betSlots);
     drawMonitor(state);
     dealerTurn = state.phase === 'dealer';
     rebuildCharms(state.player.charms);

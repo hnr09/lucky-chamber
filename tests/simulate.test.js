@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { newRun, act } from '../src/core/engine.js';
 import { createRng } from '../src/core/rng.js';
 import { maxHp } from '../src/core/charms.js';
+import { CONFIG } from '../src/core/config.js';
 import { allChips } from '../src/core/chips.js';
 
 function randomPlayer(state, rng) {
@@ -21,8 +22,9 @@ function randomPlayer(state, rng) {
   }
   if (state.player.items.length && rng.chance(0.2)) return { type: 'useItem', index: rng.int(0, state.player.items.length - 1) };
   const hand = state.player.pouch.hand.length;
-  const chip = hand && rng.chance(0.7) ? rng.int(0, hand - 1) : undefined;
-  return { type: 'shoot', target: rng.chance(0.5) ? 'dealer' : 'self', chip };
+  const n = hand ? rng.int(0, Math.min(hand, 3)) : 0;
+  const chips = rng.shuffle([...Array(hand).keys()]).slice(0, n);
+  return { type: 'shoot', target: rng.chance(0.5) ? 'dealer' : 'self', chips };
 }
 
 test('무작위 3000판: 불변식 유지, 모두 종료됨', () => {
@@ -37,7 +39,7 @@ test('무작위 3000판: 불변식 유지, 모두 종료됨', () => {
       assert.ok(p.hp >= 0 && p.hp <= maxHp(state), `hp 범위 ${p.hp}`);
       assert.ok(p.coins >= 0, '코인 음수');
       assert.ok(p.items.length <= 4 && p.charms.length <= 5);
-      assert.ok(p.pouch.hand.length <= 3 + p.mods.handSize, '손패 초과');
+      assert.ok(p.pouch.hand.length <= CONFIG.handSize + p.mods.handSize, '손패 초과');
       assert.ok(p.tickets >= 0, '티켓 음수');
       assert.ok(allChips(p.pouch).length >= 1, '칩 없음');
       assert.equal(new Set(allChips(p.pouch).map((c) => c.uid)).size, allChips(p.pouch).length, '칩 중복');

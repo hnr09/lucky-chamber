@@ -273,3 +273,25 @@ i.hp.me.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
 .charm-row { position: fixed; right: 16px; top: 112px; flex-direction: column; gap: 4px; z-index: 12; }
 .charm-row .aug { font-size: 16px; }
 @media (max-width: 640px) { .charm-row { top: 168px; right: 12px; } }
+/* 여러 칩 베팅 미리보기 */
+.formula .eq { font-family: var(--display); font-size: 20px; color: var(--gold); text-shadow: 2px 2px 0 #000; margin-left: 2px; }
+.chip-desc { max-width: 560px; }
+.bet-head { display: flex; gap: 8px; align-items: baseline; justify-content: center; flex-wrap: wrap; }
+.bet-head .pv { font-family: var(--display); font-weight: 400; color: var(--gold); font-size: 16px; }
+.bet-list { margin: 4px 0 0; padding-left: 22px; text-align: left; font-size: 12px; line-height: 1.5; }
+.bet-list small { color: #bfa58a; }
+.bet-head .seq { font-size: 14px; letter-spacing: 1px; }
+/* 넓은 화면: 베팅 상세는 오른쪽 위 패널로 (테이블 위 베팅 자리를 가리지 않게) */
+@media (min-width: 1001px) {
+  .chip-desc:has(.bet-list) {
+    position: fixed; right: 16px; top: 112px; width: 300px; text-align: left; z-index: 15;
+  }
+  .chip-desc:has(.bet-list) .bet-head { justify-content: flex-start; }
+  .charm-row { right: 330px; }
+  .bet-head .seq { display: none; }
+}
+/* 좁은 화면: 한 줄 요약만 */
+@media (max-width: 1000px) {
+  .bet-list { display: none; }
+  .bet-head small { display: none; }
+}

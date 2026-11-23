@@ -7,10 +7,10 @@ import { rigged, lastOf, clearStage } from './helpers.js';
 
 const shoot = (s, target, chip) => act(s, { type: 'shoot', target, chip });
 
-test('시작 시 손패 3장, 주머니 총 6개', () => {
+test('시작 시 손패 5장, 주머니 총 8개', () => {
   const { state } = newRun(5);
   assert.equal(state.player.pouch.hand.length, CONFIG.handSize);
-  assert.equal(allChips(state.player.pouch).length, 6);
+  assert.equal(allChips(state.player.pouch).length, 8);
 });
 
 test('칩 없이 쏘면 기존과 똑같다', () => {
@@ -35,7 +35,7 @@ test('걸린 칩은 사격 후 버린 더미로 간다', () => {
   const before = s.player.pouch.discard.length;
   shoot(s, 'dealer', 0);
   assert.equal(s.player.pouch.discard.length, before + 1);
-  assert.equal(s.duel.bet, null);
+  assert.deepEqual(s.duel.bets, []);
 });
 
 test('블루 칩: 공포탄이면 열기 +2', () => {
@@ -104,7 +104,7 @@ test('손패가 비면 주머니에서 다시 채우고, 주머니가 비면 버
     assert.equal(s.player.pouch.hand.length, CONFIG.handSize);
   }
   assert.ok(shuffled);
-  assert.equal(allChips(s.player.pouch).length, 6);
+  assert.equal(allChips(s.player.pouch).length, 8);
 });
 
 test('잘못된 칩 인덱스는 거부', () => {
@@ -151,4 +151,43 @@ test('모든 칩은 배당표 설명을 가진다', async () => {
     assert.ok(c.bet, id);
     assert.ok(c.desc.length > 0, id);
   }
+});
+
+// ── 여러 칩 동시 베팅 ──
+test('칩 3개 동시 베팅: 고른 순서대로 발동 (+배수 → ×배수가 더 크다)', () => {
+  const a = rigged([true, false, false], { hand: ['blue', 'black', 'red'] });
+  const ea = act(a, { type: 'shoot', target: 'dealer', chips: [0, 1, 2] });
+  const sa = lastOf(ea, 'score');
+  assert.equal(sa.stake, 30);           // 10 + 20
+  assert.equal(sa.mult, (1 + 1) * 2);   // 블루 +1 → 블랙 ×2
+  const b = rigged([true, false, false], { hand: ['blue', 'black', 'red'] });
+  const eb = act(b, { type: 'shoot', target: 'dealer', chips: [1, 0, 2] });
+  assert.equal(lastOf(eb, 'score').mult, 1 * 2 + 1); // 블랙 ×2 → 블루 +1
+  assert.ok(sa.points > lastOf(eb, 'score').points);
+});
+
+test('건 칩은 전부 손패에서 빠지고 버린 더미로 간다', () => {
+  const s = rigged([true, false, false], { hand: ['white', 'red', 'gold', 'white'] });
+  const before = s.player.pouch.discard.length;
+  act(s, { type: 'shoot', target: 'dealer', chips: [0, 1, 2] });
+  assert.equal(s.player.pouch.discard.length, before + 3);
+});
+
+test('베팅 칸보다 많이 걸면 거부, 같은 칩 중복도 거부', () => {
+  const s = rigged([true, false], { hand: ['white', 'white', 'white', 'white'] });
+  assert.equal(act(s, { type: 'shoot', target: 'dealer', chips: [0, 1, 2, 3] })[0].type, 'invalid');
+  assert.equal(act(s, { type: 'shoot', target: 'dealer', chips: [0, 0] })[0].type, 'invalid');
+  assert.equal(s.duel.shells.length, 2);
+});
+
+test('여러 칩의 사격 후 효과는 칩마다 따로 (골드 2개 = 코인 +4)', () => {
+  const s = rigged([true, false, false], { hand: ['gold', 'gold'] });
+  const c = s.player.coins;
+  act(s, { type: 'shoot', target: 'dealer', chips: [0, 1] });
+  assert.equal(s.player.coins, c + 4);
+});
+
+test('배당 미리보기', async () => {
+  const { previewBets } = await import('../src/core/chips.js');
+  assert.deepEqual(previewBets(['red', 'blue', 'black'], { stake: 10, mult: 1 }), { stake: 30, mult: 4, points: 120 });
 });

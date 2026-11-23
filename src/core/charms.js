@@ -55,8 +55,8 @@ export const CHARMS = {
     onScore(ctx) { if (ctx.kind === 'hit' && ctx.killShot) { ctx.mult *= 4; return '×4 배수'; } },
   },
   highRoller: {
-    name: '큰손', icon: '🎩', rare: true, ticketPrice: 2, price: 6, desc: '칩을 걸고 득점하면 판돈 +15',
-    onScore(ctx) { if (ctx.state.duel.bet) { ctx.stake += 15; return '+15 판돈'; } },
+    name: '큰손', icon: '🎩', rare: true, ticketPrice: 2, price: 6, desc: '득점 시 건 칩 1개당 판돈 +8',
+    onScore(ctx) { const n = ctx.state.duel.bets.length; if (n) { ctx.stake += 8 * n; return `+${8 * n} 판돈`; } },
   },
   fearless: {
     name: '겁 없는 자', icon: '😈', rare: true, ticketPrice: 3, price: 8, desc: '자신에게 쏜 공포탄 득점 배수 ×3',

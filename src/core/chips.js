@@ -80,7 +80,7 @@ for (const def of Object.values(CHIPS)) {
 }
 
 export const CHIP_IDS = Object.keys(CHIPS);
-export const STARTING_POUCH = ['white', 'white', 'white', 'white', 'red', 'blue'];
+export const STARTING_POUCH = ['white', 'white', 'white', 'white', 'white', 'red', 'red', 'blue'];
 
 export function makeChip(state, type) {
   state.player.nextUid = (state.player.nextUid ?? 0) + 1;
@@ -89,4 +89,16 @@ export function makeChip(state, type) {
 
 export function allChips(pouch) {
   return [...pouch.draw, ...pouch.hand, ...pouch.discard];
+}
+
+// 고른 칩 조합의 배당만 미리 계산 (부적·확률 능력 제외). UI 미리보기용.
+export function previewBets(types, { stake, mult }) {
+  let st = stake, mu = mult;
+  for (const t of types) {
+    const b = CHIPS[t].bet;
+    if (b.stake) st += b.stake;
+    if (b.mult) mu += b.mult;
+    if (b.xmult) mu *= b.xmult;
+  }
+  return { stake: st, mult: mu, points: Math.round(st * mu) };
 }
