@@ -10,9 +10,12 @@ import { renderShop, renderCall, renderEnd, renderPaytable } from './panels.js';
 import { renderManual, MANUAL_PAGES } from './manual.js';
 import { createScene } from './scene3d.js';
 import { initAudio, playEvents, sfx, toggleMute, isMuted } from './audio.js';
+import { createVersusUI } from './versus-ui.js';
 
 const params = new URLSearchParams(location.search);
 const FAST = params.has('fast');
+// 시작 화면: 기본은 홈. 테스트용 파라미터(seed/fast/skipmanual/debug)나 ?mode=solo면 바로 혼자 하기
+let mode = params.get('mode') === 'solo' || ['seed', 'fast', 'skipmanual', 'debug'].some((k) => params.has(k)) ? 'solo' : 'home';
 const app = document.getElementById('app');
 const hurtEl = document.getElementById('hurt');
 const tipEl = document.getElementById('tip');
@@ -28,7 +31,7 @@ let showPay = window.innerWidth > 1000;
 // 설명서: 처음 실행하면 자동으로 연다 (?skipmanual 이나 ?fast 면 건너뜀)
 let manualSeen = false;
 try { manualSeen = localStorage.getItem('lc-manual-seen') === '1'; } catch { /* 저장소 없음 */ }
-let showManual = !manualSeen && !params.has('skipmanual') && !params.has('fast');
+let showManual = mode === 'solo' && !manualSeen && !params.has('skipmanual') && !params.has('fast');
 let manualPage = 0;
 let lockedUntil = 0;   // 연출 중에는 입력을 막는다
 let timer = null;
@@ -36,12 +39,23 @@ let timer = null;
 initAudio();
 
 const scene = createScene(document.getElementById('scene'), {
-  onChipClick: (i) => selectChip(i),
+  onChipClick: (i) => { if (mode === 'solo') selectChip(i); },
   onHover: (info, x, y) => showTip(info, x, y),
   onHurt: () => {
     hurtEl.classList.remove('on');
     void hurtEl.offsetWidth;
     hurtEl.classList.add('on');
+  },
+});
+
+const versusUI = createVersusUI({
+  app, fxEl, scene, playEvents, sfx, isMuted, toggleMute,
+  onSolo: ({ manual = false } = {}) => {
+    mode = 'solo';
+    versusUI.hide();
+    start();
+    if (manual || !manualSeen) { showManual = true; manualPage = 0; }
+    render();
   },
 });
 
@@ -152,6 +166,7 @@ const pips = (n, max, cls) =>
   Array.from({ length: max }, (_, i) => `<i class="${cls} ${i < n ? 'on' : ''}"></i>`).join('');
 
 function render() {
+  if (mode !== 'solo') return versusUI.render();
   const { player: p, dealer, duel: d } = state;
   const busy = state.phase !== 'player' || locked();
   const pct = Math.min(100, (d.score / d.quota) * 100);
@@ -235,6 +250,7 @@ function render() {
     ${met && state.phase === 'player' ? `<button class="cashout" data-act="cashOut" ${locked() ? 'disabled' : ''}>💰 정산하고 일어서기 <small>지금 ${d.score.toLocaleString()}점 · 할당량의 ×${(d.score / d.quota).toFixed(1)}</small></button>` : ''}
     ${toast ? `<p class="toast">${toast}</p>` : ''}
     <div class="meta">
+      <button class="link" data-act="goHome">🏠 홈</button>
       <button class="link" data-act="openManual">📖 설명서</button>
       <button class="link" data-act="togglePay">${showPay ? '배당표 닫기' : '📋 배당표'}</button>
       <button class="link" data-act="toggleLog">${showLog ? '기록 닫기' : '기록'}</button>
@@ -276,6 +292,8 @@ function renderFlash() {
 // ── 입력 ───────────────────────────────────────────────
 
 app.addEventListener('click', (ev) => {
+  const vbtn = ev.target.closest('[data-vact]');
+  if (vbtn) { if (!vbtn.disabled) versusUI.handleClick(vbtn); return; }
   const btn = ev.target.closest('[data-act]');
   if (!btn || btn.disabled) return;
   const { act: type, target, index, dir, chip } = btn.dataset;
@@ -284,6 +302,7 @@ app.addEventListener('click', (ev) => {
   if (type === 'toggleLog') { showLog = !showLog; return render(); }
   if (type === 'togglePay') { showPay = !showPay; sfx.click(); return render(); }
   if (type === 'toggleMute') { toggleMute(); return render(); }
+  if (type === 'goHome') { clearTimeout(timer); mode = 'home'; fxEl.innerHTML = ''; versusUI.showHome(); return; }
   if (type === 'openManual') { showManual = true; manualPage = 0; sfx.click(); return render(); }
   if (type === 'manualNext') { manualPage = Math.min(MANUAL_PAGES - 1, manualPage + 1); sfx.click(); return render(); }
   if (type === 'manualPrev') { manualPage = Math.max(0, manualPage - 1); sfx.click(); return render(); }
@@ -302,6 +321,7 @@ app.addEventListener('click', (ev) => {
 
 // 키보드: 1~9 칩 선택(다시 누르면 취소), D 딜러, S 자신
 window.addEventListener('keydown', (ev) => {
+  if (mode !== 'solo' && !showManual) return versusUI.handleKey(ev);
   if (showManual) {
     if (ev.key === 'ArrowRight' || ev.key === 'Enter') { manualPage < MANUAL_PAGES - 1 ? (manualPage++, render()) : (showManual = false, manualSeen = true, render()); }
     else if (ev.key === 'ArrowLeft' && manualPage > 0) { manualPage--; render(); }
@@ -317,3 +337,6 @@ window.addEventListener('keydown', (ev) => {
 
 const urlSeed = Number(params.get('seed'));
 start(Number.isFinite(urlSeed) && urlSeed > 0 ? urlSeed : undefined);
+if (mode === 'home') versusUI.showHome();
+// 초대 링크(?join=코드)로 들어오면 바로 그 방에 참가
+if (params.get('join')) versusUI.join(params.get('join'));

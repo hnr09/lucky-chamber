@@ -57,6 +57,8 @@ src/core/          DOM을 모르는 순수 로직 (Node에서 그대로 테스�
   hooks.js         효과 발동 순서 (건 칩 → 부적)
   augments.js      전화 증강
   tickets.js       티켓 부스
+  versus.js        1:1 결투 규칙
+  online.js        온라인 결투 동기화 (방장이 진행, 연결 방식과 무관)
   items.js         소모품 정의
   shop.js          상점 행동
   reels.js         슬롯머신
@@ -66,12 +68,32 @@ src/ui/            엔진 이벤트를 받아서 그리기만 함
   main.js          컨트롤러 + HUD
   scene3d.js       3D 테이블 씬 (딜러, 총, 탄, 칩, 점수 모니터, 연출)
   panels.js        상점 / 전화 / 종료 오버레이
+  versus-ui.js     홈 화면 + 1:1 결투 화면
+  net-peer.js      온라인 연결 (PeerJS P2P)
 tests/             node:test
 ```
 
 **원칙**: UI는 `act()`만 호출하고 상태를 직접 바꾸지 않는다. 엔진은 무슨 일이 일어났는지
 이벤트 배열로 돌려주고, UI는 그걸로 연출과 로그를 만든다. 나중에 렌더러를 Canvas나
 PixiJS로 바꿔도 엔진은 그대로 쓴다.
+
+## 모드
+
+홈 화면에서 고른다.
+
+- **혼자 하기**: 딜러와 8스테이지 로그라이크 (위 규칙).
+- **둘이 하기**: 한 기기에서 번갈아 쏘는 1:1 결투. 3판 2선승, 체력 4, 배수 3 이상에서 맞히면 피해 2.
+- **온라인 대전**: 방을 만들면 5자리 코드가 나온다. 친구가 그 코드(또는 `?join=코드` 초대 링크)로 들어오면 시작.
+  - WebRTC P2P([PeerJS](https://peerjs.com) 1.5.4, CDN). 서로를 찾을 때만 PeerJS 공개 중계 서버를 쓰고,
+    게임 데이터는 두 브라우저가 직접 주고받는다. **별도 서버나 키가 필요 없다.**
+  - 방장이 게임을 진행하고(`src/core/online.js`), 참가자 화면에는 탄 순서가 가지 않는다.
+  - 일부 회사·학교 네트워크처럼 P2P 연결을 막는 곳에서는 접속이 안 될 수 있다.
+
+### GitHub Pages로 공개하기
+
+레포 **Settings → Pages → Build and deployment**에서 Source를 *Deploy from a branch*,
+Branch를 `main` / `/(root)`로 저장하면 `https://hnr09.github.io/lucky-chamber/`에서 플레이할 수 있다.
+빌드 과정이 없는 정적 사이트라 그대로 동작한다.
 
 ## 사운드
 
