@@ -1,0 +1,11 @@
+{
+  "name": "lucky-chamber",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Roguelike shell-roulette deckbuilder web game",
+  "scripts": {
+    "dev": "python3 -m http.server 5173",
+    "test": "node --test tests/*.test.js"
+  }
+}
