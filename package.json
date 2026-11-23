@@ -6,6 +6,7 @@
   "description": "Roguelike shell-roulette deckbuilder web game",
   "scripts": {
     "dev": "python3 -m http.server 5173",
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "balance": "node sim/balance.js"
   }
 }

@@ -520,6 +520,7 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
   }
   let shake = 0;
   let dealerTurn = false;
+  let peekGlow = 0;
   let leanK = 0;
   const hitJolt = { z: 0, x: 0 };
   let hurtGlow = 0;
@@ -592,6 +593,13 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
       } else if (e.type === 'reload') {
         animReload(t);
         t += 450;
+      } else if (e.type === 'dealerPeek') {
+        // 딜러가 약실을 들여다본다: 눈동자가 커지고 붉게 타오른다
+        tween(t, 700, (k) => { peekGlow = Math.sin(k * Math.PI); });
+        t += 500;
+      } else if (e.type === 'dealerSaw') {
+        tween(t, 400, (k) => { under.intensity = 0.9 + Math.sin(k * Math.PI) * 4; });
+        t += 300;
       } else if (e.type === 'peek') {
         tween(t, 400, (k) => { shellsGroup.children[0] && (shellsGroup.children[0].position.y = 1.08 + Math.sin(k * Math.PI) * 0.12); });
       }
@@ -600,15 +608,16 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
   }
 
   let ringing = false;
-  function moveCamera(next) {
+  function moveCamera(next, delay = 0) {
     const fromPos = camPos.clone(), fromLook = camLook.clone();
+    tween(delay, 1, () => { fromPos.copy(camPos); fromLook.copy(camLook); });
     const portrait = canvas.clientWidth / canvas.clientHeight < 0.8;
     // 세로 화면에서는 상점 패널이 아래에 깔리므로 진열장을 정면 위쪽에 둔다
     const to = next === 'shop' && portrait
       ? { pos: new THREE.Vector3(0.2, 1.75, 0.6), look: new THREE.Vector3(3.05, 0.95, 0.15) }
       : POSES[next];
     pose = next;
-    tween(0, 1000, (k) => {
+    tween(delay, 1000, (k) => {
       const e = easeInOut(k);
       camPos.lerpVectors(fromPos, to.pos, e);
       camPos.y += Math.sin(k * Math.PI) * 0.15; // 일어서는 느낌
@@ -625,8 +634,10 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
     const want = state.phase === 'call' ? 'phone'
       : state.phase === 'shop' ? 'shop'
       : state.phase === 'gameOver' && state.result?.reason === 'dead' ? 'dead' : 'table';
-    if (want !== pose) moveCamera(want);
-    ringing = state.phase === 'call';
+    // 클리어 연출을 먼저 보여주고 일어난다 / 사망은 잠깐 뒤에 쓰러진다
+    if (want !== pose) moveCamera(want, want === 'phone' ? 1900 : want === 'dead' ? 900 : 0);
+    if (state.phase === 'call' && !ringing) tween(1900, 1, () => { ringing = state.phase === 'call'; });
+    if (state.phase !== 'call') ringing = false;
   }
 
   // ── 입력: 칩 클릭 ──
@@ -726,10 +737,41 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
     dealer.position.z = -1.55 + leanK * 0.22 + hitJolt.z;
     head.rotation.x = leanK * 0.25 + hitJolt.x;
     pupilMat.color.setRGB(1, 0.14 + Math.random() * 0.1 * leanK, 0.08);
-    const pupilScale = 1 + leanK * 0.6 + (Math.random() < 0.02 ? 1 : 0);
+    const pupilScale = 1 + leanK * 0.6 + peekGlow * 2.5 + (Math.random() < 0.02 ? 1 : 0);
+    if (peekGlow > 0.01) pupilMat.color.setRGB(1, 0.35 * peekGlow, 0.1 * peekGlow);
     for (const pp of pupils) pp.scale.setScalar(pupilScale);
     renderer.render(scene, camera);
   });
 
-  return { update, play, resize };
+  // 잭팟 연출: 레벨이 클수록 금화가 많이 쏟아지고 화면이 흔들린다
+  const coinGeo = new THREE.CylinderGeometry(0.05, 0.05, 0.012, 10);
+  const coinMat = mat(0xffcf4a, { metalness: 0.9, roughness: 0.25, emissive: 0x3a2a00 });
+  const gold = new THREE.PointLight(0xffc040, 0, 6, 1.2);
+  gold.position.set(0, 2.0, 0.4);
+  scene.add(gold);
+  function celebrate(level, delay = 0) {
+    const n = Math.min(60, 8 + level * 10);
+    tween(delay, 1, () => { shake = Math.max(shake, 0.04 * level); });
+    tween(delay, 1400, (k) => { gold.intensity = 10 * level * (1 - k); });
+    for (let i = 0; i < n; i++) {
+      const c = new THREE.Mesh(coinGeo, coinMat);
+      const x = (Math.random() - 0.5) * 1.8, z = -0.4 + Math.random() * 1.0;
+      const spin = (Math.random() - 0.5) * 20;
+      const start = 2.4 + Math.random() * 0.8;
+      c.visible = false;
+      scene.add(c);
+      tween(delay + i * 18, 900, (k) => {
+        c.visible = true;
+        const y = start - (start - 0.96) * Math.min(1, k * k * 1.3);
+        c.position.set(x, Math.max(0.96, y), z);
+        c.rotation.set(spin * k, spin * k * 0.5, 0);
+      });
+      tween(delay + i * 18 + 2200, 500, (k) => {
+        c.position.y = 0.96 - k * 0.05;
+        if (k >= 1) { scene.remove(c); }
+      });
+    }
+  }
+
+  return { update, play, resize, celebrate };
 }

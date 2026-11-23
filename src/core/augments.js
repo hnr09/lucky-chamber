@@ -2,7 +2,7 @@
 // 대부분 player.mods 수치를 올리는 방식이라 엔진 곳곳에서 mods만 읽으면 된다.
 import { CHIP_IDS, makeChip, allChips } from './chips.js';
 
-export const BASE_MODS = { baseStake: 0, startHeat: 0, handSize: 0, maxHp: 0, discount: 0, reloadCoins: 0, ticketBonus: 0, betSlots: 0 };
+export const BASE_MODS = { baseStake: 0, startHeat: 0, handSize: 0, maxHp: 0, discount: 0, reloadCoins: 0, ticketBonus: 0, betSlots: 0, chambers: 0 };
 
 export const AUGMENTS = {
   sharpen:    { name: '날 세우기',   icon: '🗡️', desc: '딜러 적중 기본 판돈 +5', apply: (s) => { s.player.mods.baseStake += 5; } },

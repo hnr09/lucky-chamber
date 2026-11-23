@@ -295,3 +295,24 @@ i.hp.me.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
   .bet-list { display: none; }
   .bet-head small { display: none; }
 }
+
+/* ── 잭팟 / 클리어 연출 ── */
+.formula small b.last { color: var(--live); animation: blink 1s steps(2) infinite; }
+.flash.jackpot { animation-duration: 2.2s; }
+.flash .jp { font-family: var(--display); font-size: 54px; letter-spacing: 4px; color: #ffd84a;
+  text-shadow: 0 0 10px #ff9a00, 0 0 30px #ff6a00, 4px 4px 0 #000; animation: jp .25s steps(2) 6; }
+.flash.j2 .jp { font-size: 70px; }
+.flash.j3 .jp { font-size: 84px; color: #fff3a0; text-shadow: 0 0 14px #fff, 0 0 40px #ffb000, 0 0 80px #ff4000, 5px 5px 0 #000; }
+.flash.jackpot .pts { font-size: 26px; border-color: #c9a24a; }
+.flash.j3 .pts b, .flash.j2 .pts b { font-size: 34px; }
+@keyframes jp { 50% { transform: scale(1.12) rotate(-2deg); filter: brightness(1.4); } }
+.flash.clear { animation-duration: 2.6s; }
+.clear-title { font-family: var(--display); font-size: 44px; color: #ffd84a; letter-spacing: 3px; text-shadow: 0 0 20px #ff9a00, 3px 3px 0 #000; }
+.flash.clear .payout { font-family: var(--display); font-size: 30px; color: var(--gold); text-shadow: 2px 2px 0 #000; background: #000c; padding: 4px 14px; }
+@media (max-width: 480px) {
+  .flash .jp { font-size: 38px; } .flash.j2 .jp { font-size: 46px; } .flash.j3 .jp { font-size: 52px; }
+  .clear-title { font-size: 32px; }
+}
+#fx { position: fixed; inset: 0; pointer-events: none; z-index: 45; }
+/* 전화 패널은 클리어 연출 → 일어서기가 끝난 뒤에 */
+.overlay.call-wrap { animation-delay: 2.9s; }

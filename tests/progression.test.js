@@ -38,7 +38,7 @@ test('상점에서는 전화를 받을 수 없다', () => {
 test('증강 효과: 날 세우기 / 예열 / 넓은 손 / 강심장 / 수당', () => {
   const s = rigged([true, true]);
   for (const id of ['sharpen', 'warmup', 'bigHand', 'vitality', 'stipend']) AUGMENTS[id].apply(s, { pick: (a) => a[0] });
-  assert.equal(maxHp(s), 5);
+  assert.equal(maxHp(s), 6); // 기본 5 + 강심장 1
   s.duel.shells = [true, false, false];
   s.duel.heat = 1;
   act(s, { type: 'shoot', target: 'dealer' });

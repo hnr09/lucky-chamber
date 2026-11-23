@@ -13,7 +13,7 @@ const trig = (t = []) => (t.length ? ` [${t.map((x) => `${x.icon}${x.label}`).jo
 export function describe(e) {
   switch (e.type) {
     case 'stageStart': return `── 스테이지 ${e.stage} · 할당량 ${e.quota} · 딜러 체력 ${e.dealerHp}${e.healed ? ` · 체력 +${e.healed}` : ''} ──`;
-    case 'reload': return `약실 장전: 실탄 ${e.live} · 공포탄 ${e.blank}`;
+    case 'reload': return `약실 ${e.chamberNo}/${e.limit} 장전: 실탄 ${e.live} · 공포탄 ${e.blank}`;
     case 'itemGained': return `보급: ${ITEMS[e.id].icon} ${ITEMS[e.id].name}`;
     case 'shot': {
       const tgt = e.shooter === e.target ? '자신' : who(e.target);
@@ -32,6 +32,10 @@ export function describe(e) {
     case 'phoneRing': return '📞 따르릉… 전화가 온다';
     case 'augment': return `증강: ${AUGMENTS[e.id].icon} ${AUGMENTS[e.id].name}`;
     case 'boughtBooth': return `티켓 교환: ${(e.kind === 'charm' ? CHARMS : TICKET_GOODS)[e.id].name} (-${e.price}🎟️)`;
+    case 'dealerEndures': return '딜러가 피를 흘리며 버틴다… (할당량을 채워야 쓰러진다)';
+    case 'dealerPeek': return '👁 딜러가 약실을 들여다본다…';
+    case 'dealerSaw': return '🩸 딜러가 강화탄을 밀어 넣는다 (피해 2)';
+    case 'dealerFolds': return '약실이 바닥났다. 딜러가 판을 접는다.';
     case 'stipend': return `수당 +${e.coins} 코인`;
     case 'gameOver': return e.reason === 'dead' ? '☠ 사망' : `☠ 할당량 미달 (${e.score}/${e.quota})`;
     case 'victory': return '🏆 모든 스테이지 돌파!';

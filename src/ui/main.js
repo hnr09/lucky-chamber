@@ -1,5 +1,5 @@
 // UI 컨트롤러: 엔진에 행동을 보내고, 3D 씬과 HTML HUD를 갱신한다.
-import { newRun, act, betSlots } from '../core/engine.js';
+import { newRun, act, betSlots, chamberLimit } from '../core/engine.js';
 import { CONFIG } from '../core/config.js';
 import { CHARMS, maxHp } from '../core/charms.js';
 import { CHIPS, betText, previewBets } from '../core/chips.js';
@@ -14,6 +14,7 @@ const FAST = params.has('fast');
 const app = document.getElementById('app');
 const hurtEl = document.getElementById('hurt');
 const tipEl = document.getElementById('tip');
+const fxEl = document.getElementById('fx'); // 연출 전용 레이어: HUD가 다시 그려져도 연출이 반복되지 않는다
 
 let state;
 let log = [];
@@ -56,6 +57,7 @@ function start(seed) {
   state = r.state;
   log = [];
   flash = null;
+  fxEl.innerHTML = '';
   toast = '';
   selectedChips = [];
   lockedUntil = 0;
@@ -92,8 +94,18 @@ function dispatch(action) {
   // 점수 팝업은 총이 발사되는 타이밍에 맞춰 보여준다
   const shot = events.find((e) => e.type === 'shot');
   const sc = [...events].reverse().find((e) => e.type === 'score');
+  // 잭팟 레벨: 한 방이 할당량의 50% 이상이면 1, 100% 이상 2, 300% 이상 3
+  const quota = state.duel?.quota ?? 1;
+  const jackpot = sc ? (sc.points >= quota * 3 ? 3 : sc.points >= quota ? 2 : sc.points >= quota * 0.5 ? 1 : 0) : 0;
+  if (jackpot && !FAST) scene.celebrate(jackpot, shot ? 650 : 0);
+  const clear = events.find((e) => e.type === 'stageClear');
   const showFlash = () => {
-    if (shot || sc) flash = { shot, score: sc, key: Math.random() };
+    if (shot || sc || clear) {
+      const key = Math.random();
+      flash = { shot, score: sc, jackpot, clear, key };
+      fxEl.innerHTML = renderFlash();
+      setTimeout(() => { if (flash?.key === key) { fxEl.innerHTML = ''; flash = null; } }, 2800);
+    }
     refresh();
   };
   refresh();
@@ -105,6 +117,9 @@ function dispatch(action) {
     timer = setTimeout(refresh, duration);
   }
 }
+
+// ?debug: 콘솔에서 상태와 최근 이벤트를 볼 수 있다
+if (params.has('debug')) window.__debug = () => ({ state, log: log.slice(-12).map((l) => l.text) });
 
 function record(events) {
   for (const e of events) {
@@ -144,12 +159,11 @@ function render() {
     </div>
   <div class="plate formula ${state.phase === 'call' || state.phase === 'shop' ? 'away' : ''}">
     <span class="stake">${pv.stake}</span><span class="x">×</span><span class="mult">${pv.mult}</span>${picked.length ? `<span class="eq">= ${pv.points}</span>` : ''}
-    <small>장전 #${d.chamberNo} · 실탄 ${d.loaded.live} · 공포탄 ${d.loaded.blank} · 남은 ${d.shells.length}${d.empowered ? ' · 💥강화' : ''}</small>
+    <small><b class="${d.chamberNo >= chamberLimit(state) ? 'last' : ''}">약실 ${d.chamberNo}/${chamberLimit(state)}</b> · 실탄 ${d.loaded.live} · 공포탄 ${d.loaded.blank} · 남은 ${d.shells.length}${d.empowered ? ' · 💥강화' : ''}</small>
   </div>
     <div class="plate money"><b class="coin">${p.coins}<small>¢</small></b><b class="ticket">${p.tickets}<small>🎟️</small></b></div>
   </header>
 
-  ${renderFlash()}
 
   <section class="hud-bottom ${state.phase === 'call' || state.phase === 'shop' ? 'away' : ''}">
 
@@ -202,10 +216,18 @@ function render() {
 
 function renderFlash() {
   if (!flash) return '';
-  const { shot, score } = flash;
-  return `<div class="flash" data-k="${flash.key}">
+  const { shot, score, jackpot, clear } = flash;
+  if (clear) {
+    return `<div class="flash clear" data-k="${flash.key}">
+      <div class="clear-title">할당량 달성</div>
+      <div class="pts">${clear.score.toLocaleString()} / ${clear.quota.toLocaleString()} <b>×${(clear.score / clear.quota).toFixed(1)}</b></div>
+      <div class="payout">+${clear.coins}¢${clear.bonus ? ` <small>(초과 보너스 +${clear.bonus})</small>` : ''} · +${clear.tickets}🎟️</div>
+    </div>`;
+  }
+  return `<div class="flash ${jackpot ? `jackpot j${jackpot}` : ''}" data-k="${flash.key}">
+    ${jackpot ? `<div class="jp">${['', 'BIG WIN', 'JACKPOT', 'MEGA JACKPOT'][jackpot]}</div>` : ''}
     ${shot ? `<div class="bang ${shot.live ? 'live' : 'blank'}">${shot.live ? 'BANG!' : '...click'}</div>` : ''}
-    ${score ? `<div class="pts"><span class="stake">${score.stake}</span> × <span class="mult">${score.mult}</span> = <b>+${score.points}</b></div>
+    ${score ? `<div class="pts"><span class="stake">${score.stake}</span> × <span class="mult">${score.mult}</span> = <b>+${score.points.toLocaleString()}</b></div>
       <div class="trig">${score.triggers.map((t) => `<span>${t.icon} ${t.label}</span>`).join('')}</div>` : ''}
   </div>`;
 }

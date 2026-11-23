@@ -62,7 +62,23 @@ const HANDLERS = {
   dealerTurn: {
     phases: ['dealer'],
     run(state, _a, events) {
-      fire(state, 'dealer', dealerDecide(state.duel, rngOf(state)), events);
+      const d = state.duel;
+      const spec = stageSpec(state.stage);
+      const rng = rngOf(state);
+      // 후반 딜러는 약실을 들여다보고, 실탄이면 2배 피해탄까지 쓴다
+      let target;
+      if (rng.chance(spec.dealerPeek)) {
+        const live = d.shells[0];
+        events.push({ type: 'dealerPeek' });
+        target = live ? 'player' : 'dealer';
+        if (live && rng.chance(spec.dealerSaw)) {
+          d.dealerSaw = true;
+          events.push({ type: 'dealerSaw' });
+        }
+      } else {
+        target = dealerDecide(d, rng);
+      }
+      fire(state, 'dealer', target, events);
     },
   },
   buyCharm: { phases: ['shop'], run: shop.buyCharm },
@@ -115,18 +131,36 @@ function startStage(state, events) {
   pouch.hand = [];
   pouch.discard = [];
   const before = state.player.hp;
-  state.player.hp = Math.min(maxHp(state), state.player.hp + CONFIG.healOnStageStart);
+  state.player.hp = CONFIG.healOnStageStart === 'full' ? maxHp(state) : Math.min(maxHp(state), state.player.hp + CONFIG.healOnStageStart);
   events.push({ type: 'stageStart', stage: state.stage, quota: spec.quota, dealerHp: spec.dealerHp, healed: state.player.hp - before });
   reload(state, events);
+}
+
+export function chamberLimit(state) {
+  return CONFIG.chambersPerStage + state.player.mods.chambers;
+}
+
+// 약실이 비었을 때: 남은 약실이 있으면 재장전, 없으면 정산 (할당량 달성 → 클리어 / 미달 → 실패)
+function nextChamber(state, events) {
+  const d = state.duel;
+  if (d.chamberNo < chamberLimit(state)) return reload(state, events);
+  if (d.score >= d.quota) {
+    events.push({ type: 'dealerFolds' });
+    return clearStage(state, events);
+  }
+  state.phase = 'gameOver';
+  state.result = { victory: false, reason: 'quota', stage: state.stage };
+  events.push({ type: 'gameOver', reason: 'quota', score: d.score, quota: d.quota });
 }
 
 function reload(state, events) {
   const d = state.duel;
   const rng = rngOf(state);
-  const { shells, live, blank } = loadChamber(rng, stageSpec(state.stage).maxShells);
+  const spec = stageSpec(state.stage);
+  const { shells, live, blank } = loadChamber(rng, spec.maxShells, spec.liveFrac);
   Object.assign(d, { shells, spent: [], loaded: { live, blank }, heat: 1 + state.player.mods.startHeat, knownCurrent: null });
   d.chamberNo += 1;
-  events.push({ type: 'reload', live, blank, chamberNo: d.chamberNo });
+  events.push({ type: 'reload', live, blank, chamberNo: d.chamberNo, limit: chamberLimit(state) });
   if (state.player.mods.reloadCoins) {
     state.player.coins += state.player.mods.reloadCoins;
     events.push({ type: 'stipend', coins: state.player.mods.reloadCoins });
@@ -205,9 +239,9 @@ function fire(state, shooter, target, events) {
     if (target === 'dealer') {
       if (live) {
         const dmg = empowered ? 2 : 1;
-        damageDealer(state, dmg, events);
         const stake = (CONFIG.baseHitStake + state.player.mods.baseStake) * (empowered ? 2 : 1);
-        score(state, { kind: 'hit', stake, mult: d.heat, lastShell, killShot: state.dealer.hp === 0 }, events);
+        score(state, { kind: 'hit', stake, mult: d.heat, lastShell, killShot: state.dealer.hp - dmg <= 0 }, events);
+        hurtDealer(state, dmg, events);
       }
     } else if (live) {
       damagePlayer(state, 1, events, true);
@@ -218,19 +252,33 @@ function fire(state, shooter, target, events) {
     }
     settleBet(state, { live, target, hit: live && target === 'dealer' }, events);
   } else if (target === 'player') {
-    if (live) damagePlayer(state, 1, events);
+    const dmg = d.dealerSaw ? 2 : 1;
+    d.dealerSaw = false;
+    if (live) damagePlayer(state, dmg, events);
   } else if (live) {
-    damageDealer(state, 1, events);
+    hurtDealer(state, 1, events);
   } else {
     keepTurn = true;
   }
 
   if (checkEnd(state, events)) return;
-  if (d.shells.length === 0) return reload(state, events);
+  if (d.shells.length === 0) return nextChamber(state, events);
   const next = keepTurn ? shooter : (shooter === 'player' ? 'dealer' : 'player');
   events.push({ type: 'turn', phase: next });
   if (next === 'player') enterPlayerPhase(state, events);
   else state.phase = next;
+}
+
+// 할당량을 채우기 전에는 딜러가 죽지 않고 1에서 버틴다 (누가 쐈든)
+function hurtDealer(state, amount, events) {
+  const d = state.duel;
+  if (d.score < d.quota && state.dealer.hp - amount <= 0) {
+    const took = state.dealer.hp - 1;
+    if (took > 0) damageDealer(state, took, events);
+    events.push({ type: 'dealerEndures' });
+    return;
+  }
+  damageDealer(state, amount, events);
 }
 
 function damageDealer(state, amount, events) {
@@ -271,15 +319,15 @@ function checkEnd(state, events) {
     return true;
   }
   if (state.dealer.hp > 0) return false;
+  clearStage(state, events);
+  return true;
+}
 
-  if (d.score < d.quota) {
-    state.phase = 'gameOver';
-    state.result = { victory: false, reason: 'quota', stage: state.stage };
-    events.push({ type: 'gameOver', reason: 'quota', score: d.score, quota: d.quota });
-    return true;
-  }
+function clearStage(state, events) {
+  const d = state.duel;
   const spec = stageSpec(state.stage);
-  const bonus = Math.min(5, Math.floor((d.score - d.quota) / Math.max(1, d.quota / 4)));
+  // 초과 달성 보너스: 할당량의 2배마다 +3 코인 (로그 스케일, 최대 12). 큰 한 방이 돈이 된다.
+  const bonus = Math.min(12, Math.floor(Math.log2(d.score / d.quota) * 3));
   const ctx = { coins: spec.reward + bonus, state, rng: rngOf(state) };
   const triggers = runHook(state, 'onStageEnd', ctx);
   state.player.coins += ctx.coins;
@@ -300,7 +348,6 @@ function checkEnd(state, events) {
   } else {
     ringPhone(state, events);
   }
-  return true;
 }
 
 // ── 전화 (증강) ────────────────────────────────────────────
@@ -353,7 +400,7 @@ function useItem(state, { index }, events) {
       d.spent.push(live);
       d.knownCurrent = null;
       events.push({ type: 'eject', live });
-      if (d.shells.length === 0) reload(state, events);
+      if (d.shells.length === 0) nextChamber(state, events);
       break;
     }
     case 'hollow':
