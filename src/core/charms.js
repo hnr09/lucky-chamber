@@ -2,20 +2,20 @@
 // 부적은 슬롯 순서대로 발동하므로 (+배수 → ×배수) 순서가 점수를 바꾼다.
 //
 // 훅 목록
-//   onScore(ctx)          ctx: { kind: 'hit'|'selfBlank', chips, mult, lastShell, state, rng }
+//   onScore(ctx)          ctx: { kind: 'hit'|'selfBlank', stake, mult, lastShell, state, rng }
 //   onHeatGain(ctx)       ctx: { gain, state, rng }
 //   onIncomingDamage(ctx) ctx: { amount, cancelled, state, rng }
 //   onStageEnd(ctx)       ctx: { coins, state, rng }
 //   onSpin(ctx)           ctx: { result, payout, state, rng }
-// 정적 속성: maxHpMod
+// 정적 속성: maxHpMod, rare(티켓 부스 전용), ticketPrice
 export const CHARMS = {
   leadTooth: {
-    name: '납 송곳니', icon: '🦷', price: 4, desc: '딜러 적중 시 칩 +6',
-    onScore(ctx) { if (ctx.kind === 'hit') { ctx.chips += 6; return '+6 칩'; } },
+    name: '납 송곳니', icon: '🦷', price: 4, desc: '딜러 적중 시 판돈 +6',
+    onScore(ctx) { if (ctx.kind === 'hit') { ctx.stake += 6; return '+6 판돈'; } },
   },
   steadyNerve: {
-    name: '강철 신경', icon: '🫀', price: 4, desc: '자신에게 공포탄을 쏴서 얻는 칩 +10',
-    onScore(ctx) { if (ctx.kind === 'selfBlank') { ctx.chips += 10; return '+10 칩'; } },
+    name: '강철 신경', icon: '🫀', price: 4, desc: '자신에게 공포탄을 쏴서 얻는 판돈 +10',
+    onScore(ctx) { if (ctx.kind === 'selfBlank') { ctx.stake += 10; return '+10 판돈'; } },
   },
   coldHands: {
     name: '차가운 손', icon: '🧤', price: 5, desc: '공포탄으로 얻는 열기 +1',
@@ -48,21 +48,24 @@ export const CHARMS = {
     name: '행운의 동전', icon: '🪙', price: 4, desc: '슬롯머신 페어 보상 +2 코인',
     onSpin(ctx) { if (ctx.result.kind === 'pair') { ctx.payout.coins += 2; return '+2 코인'; } },
   },
+
+  // ── 희귀 부적: 티켓 부스 전용 (rare: true) ──
+  executioner: {
+    name: '처형인', icon: '🪓', rare: true, ticketPrice: 3, price: 8, desc: '딜러를 쓰러뜨리는 사격의 배수 ×4',
+    onScore(ctx) { if (ctx.kind === 'hit' && ctx.killShot) { ctx.mult *= 4; return '×4 배수'; } },
+  },
+  highRoller: {
+    name: '큰손', icon: '🎩', rare: true, ticketPrice: 2, price: 6, desc: '칩을 걸고 득점하면 판돈 +15',
+    onScore(ctx) { if (ctx.state.duel.bet) { ctx.stake += 15; return '+15 판돈'; } },
+  },
+  fearless: {
+    name: '겁 없는 자', icon: '😈', rare: true, ticketPrice: 3, price: 8, desc: '자신에게 쏜 공포탄 득점 배수 ×3',
+    onScore(ctx) { if (ctx.kind === 'selfBlank') { ctx.mult *= 3; return '×3 배수'; } },
+  },
 };
 export const CHARM_IDS = Object.keys(CHARMS);
 
-export function runHook(state, hook, ctx) {
-  const triggers = [];
-  for (const id of state.player.charms) {
-    const fn = CHARMS[id]?.[hook];
-    if (!fn) continue;
-    const label = fn(ctx);
-    if (label) triggers.push({ id, name: CHARMS[id].name, icon: CHARMS[id].icon, label });
-  }
-  return triggers;
-}
-
 export function maxHp(state) {
-  const mod = state.player.charms.reduce((a, id) => a + (CHARMS[id].maxHpMod ?? 0), 0);
+  const mod = state.player.charms.reduce((a, id) => a + (CHARMS[id].maxHpMod ?? 0), 0) + (state.player.mods?.maxHp ?? 0);
   return Math.max(1, state.player.baseMaxHp + mod);
 }

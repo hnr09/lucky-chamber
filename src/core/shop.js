@@ -1,14 +1,26 @@
 import { CONFIG } from './config.js';
-import { CHARMS, CHARM_IDS, runHook, maxHp } from './charms.js';
+import { CHARMS, CHARM_IDS, maxHp } from './charms.js';
+import { runHook } from './hooks.js';
+import { CHIPS, CHIP_IDS, makeChip, allChips } from './chips.js';
 import { ITEMS, ITEM_IDS } from './items.js';
 import { createRng } from './rng.js';
 import { spinReels } from './reels.js';
+import { rollBooth, boothPrice, TICKET_GOODS } from './tickets.js';
+
+// 증강 '단골 할인' 적용 가격
+export const priceOf = (state, base) => Math.max(1, base - (state.player.mods?.discount ?? 0));
 
 const invalid = (events, reason) => events.push({ type: 'invalid', reason });
 
 function rollCharms(state, rng) {
-  const pool = CHARM_IDS.filter((id) => !state.player.charms.includes(id));
+  const pool = CHARM_IDS.filter((id) => !CHARMS[id].rare && !state.player.charms.includes(id));
   return rng.shuffle(pool).slice(0, CONFIG.shop.charmOffers);
+}
+
+// 화이트 칩은 시작 칩이라 상점에는 잘 안 나온다
+function rollChips(rng) {
+  const pool = CHIP_IDS.filter((id) => id !== 'white');
+  return Array.from({ length: CONFIG.shop.chipOffers }, () => rng.pick(pool));
 }
 
 function rollItems(rng) {
@@ -20,6 +32,8 @@ export function openShop(state) {
   state.shop = {
     charms: rollCharms(state, rng),
     items: rollItems(rng),
+    chips: rollChips(rng),
+    booth: rollBooth(state, rng),
     rerollCost: CONFIG.shop.rerollBase,
     spinCost: CONFIG.shop.spinCost,
     lastSpin: null,
@@ -34,7 +48,7 @@ export function buyCharm(state, { index }, events) {
   const p = state.player;
   const id = state.shop.charms[index];
   if (!id) return invalid(events, '없는 상품');
-  const { price } = CHARMS[id];
+  const price = priceOf(state, CHARMS[id].price);
   if (p.charms.length >= CONFIG.maxCharms) return invalid(events, '부적 슬롯이 가득 찼다');
   if (p.coins < price) return invalid(events, '코인이 부족하다');
   p.coins -= price;
@@ -48,13 +62,60 @@ export function buyItem(state, { index }, events) {
   const p = state.player;
   const id = state.shop.items[index];
   if (!id) return invalid(events, '없는 상품');
-  const { price } = ITEMS[id];
+  const price = priceOf(state, ITEMS[id].price);
   if (p.items.length >= CONFIG.maxItems) return invalid(events, '아이템 칸이 가득 찼다');
   if (p.coins < price) return invalid(events, '코인이 부족하다');
   p.coins -= price;
   p.items.push(id);
   state.shop.items[index] = null;
   events.push({ type: 'bought', kind: 'item', id, price });
+}
+
+export function buyBooth(state, { index }, events) {
+  const p = state.player;
+  const offer = state.shop.booth[index];
+  if (!offer) return invalid(events, '없는 상품');
+  const price = boothPrice(offer);
+  if (p.tickets < price) return invalid(events, '티켓이 부족하다');
+  if (offer.kind === 'charm') {
+    if (p.charms.length >= CONFIG.maxCharms) return invalid(events, '부적 슬롯이 가득 찼다');
+    p.charms.push(offer.id);
+  } else {
+    TICKET_GOODS[offer.id].apply(state, createRng(state.rng));
+  }
+  p.tickets -= price;
+  p.hp = Math.max(1, Math.min(p.hp, maxHp(state)));
+  state.shop.booth[index] = null;
+  events.push({ type: 'boughtBooth', kind: offer.kind, id: offer.id, price });
+}
+
+export function buyChip(state, { index }, events) {
+  const p = state.player;
+  const type = state.shop.chips[index];
+  if (!type) return invalid(events, '없는 상품');
+  const price = priceOf(state, CHIPS[type].price);
+  if (p.coins < price) return invalid(events, '코인이 부족하다');
+  p.coins -= price;
+  p.pouch.discard.push(makeChip(state, type));
+  state.shop.chips[index] = null;
+  events.push({ type: 'bought', kind: 'chip', id: type, price });
+}
+
+// 칩 주머니에서 해당 종류 칩 1개를 영구 제거 (덱 압축)
+export function removeChip(state, { chipType }, events) {
+  const p = state.player;
+  const cost = CONFIG.shop.removeChipCost;
+  if (allChips(p.pouch).length <= CONFIG.minPouch) return invalid(events, `칩 주머니는 최소 ${CONFIG.minPouch}개`);
+  if (p.coins < cost) return invalid(events, '코인이 부족하다');
+  for (const pile of ['discard', 'draw', 'hand']) {
+    const i = p.pouch[pile].findIndex((c) => c.type === chipType);
+    if (i >= 0) {
+      p.pouch[pile].splice(i, 1);
+      p.coins -= cost;
+      return events.push({ type: 'chipRemoved', chip: chipType, cost });
+    }
+  }
+  invalid(events, '그 칩이 없다');
 }
 
 export function sellCharm(state, { index }, events) {
@@ -82,7 +143,9 @@ export function reroll(state, _a, events) {
   const s = state.shop;
   if (p.coins < s.rerollCost) return invalid(events, '코인이 부족하다');
   p.coins -= s.rerollCost;
-  s.charms = rollCharms(state, createRng(state.rng));
+  const rng = createRng(state.rng);
+  s.charms = rollCharms(state, rng);
+  s.chips = rollChips(rng);
   events.push({ type: 'reroll', cost: s.rerollCost });
   s.rerollCost += 1;
 }
@@ -104,6 +167,8 @@ export function spin(state, _a, events) {
     p.items.push(gainedItem);
   }
   if (hp) p.hp = Math.max(1, Math.min(maxHp(state), p.hp + hp));
-  s.lastSpin = { reels: result.reels, label: result.label, coins, gainedItem, hp };
+  const tickets = ctx.payout.tickets ?? 0;
+  p.tickets += tickets;
+  s.lastSpin = { reels: result.reels, label: result.label, coins, gainedItem, hp, tickets };
   events.push({ type: 'spin', ...s.lastSpin, triggers });
 }

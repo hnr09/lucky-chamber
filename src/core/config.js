@@ -5,11 +5,14 @@ export const CONFIG = {
   startCoins: 4,
   maxItems: 4,
   maxCharms: 5,
-  baseHitChips: 10,     // 딜러에게 실탄 적중 시 기본 칩
-  selfBlankChips: 5,    // 자신에게 공포탄을 쐈을 때 기본 칩
+  handSize: 3,          // 베팅 칩 손패 크기
+  minPouch: 4,          // 칩 주머니 최소 크기 (제거 서비스 한도)
+  baseHitStake: 10,     // 딜러에게 실탄 적중 시 기본 판돈
+  selfBlankStake: 5,    // 자신에게 공포탄을 쐈을 때 기본 판돈
   heatPerBlank: 1,      // 자신에게 공포탄 → 열기(배수) 증가량
   healOnStageStart: 1,
-  shop: { charmOffers: 3, itemOffers: 2, rerollBase: 2, spinCost: 2 },
+  clearGiftChips: 2,    // 스테이지 클리어 시 받는 화이트 칩
+  shop: { charmOffers: 3, itemOffers: 2, chipOffers: 3, rerollBase: 2, spinCost: 2, removeChipCost: 1 },
 };
 
 const QUOTAS = [30, 60, 100, 160, 250, 380, 560, 800];

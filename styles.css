@@ -5,7 +5,7 @@
   --panel: #1b2420;
   --ink: #e8e2d0;
   --muted: #8f9a90;
-  --chips: #4aa3ff;
+  --stake: #4aa3ff;
   --mult: #ff5a4e;
   --gold: #f2c14e;
   --live: #e0443a;
@@ -28,7 +28,7 @@ small { color: var(--muted); font-size: 11px; }
 .coin { color: var(--gold); }
 .score { color: var(--gold); }
 .bar { height: 6px; background: #0007; border-radius: 3px; overflow: hidden; }
-.bar i { display: block; height: 100%; background: var(--chips); transition: width .3s; }
+.bar i { display: block; height: 100%; background: var(--stake); transition: width .3s; }
 .bar i.met { background: var(--gold); }
 
 .side { display: flex; justify-content: space-between; align-items: center; padding: 8px 12px; border-radius: var(--radius); border: 1px solid var(--line); }
@@ -49,8 +49,8 @@ small { color: var(--muted); font-size: 11px; }
 .loadinfo { font-size: 12px; color: var(--muted); text-align: center; }
 .emp { color: var(--gold); }
 .formula { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; justify-content: center; }
-.formula .chips, .formula .mult { font-size: 22px; font-weight: 800; padding: 4px 12px; border-radius: 8px; }
-.chips { color: #fff; background: var(--chips); }
+.formula .stake, .formula .mult { font-size: 22px; font-weight: 800; padding: 4px 12px; border-radius: 8px; }
+.stake { color: #fff; background: var(--stake); }
 .mult { color: #fff; background: var(--mult); }
 .formula small { width: 100%; text-align: center; }
 .x { font-weight: 800; }
@@ -61,7 +61,7 @@ small { color: var(--muted); font-size: 11px; }
 .bang.live { color: var(--live); }
 .bang.blank { color: var(--blank); }
 .pts { background: #000c; padding: 6px 10px; border-radius: 8px; }
-.pts .chips, .pts .mult { padding: 1px 6px; border-radius: 4px; }
+.pts .stake, .pts .mult { padding: 1px 6px; border-radius: 4px; }
 .pts b { color: var(--gold); }
 .trig { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; }
 .trig span { background: var(--gold); color: #000; font-size: 11px; padding: 2px 6px; border-radius: 4px; }
@@ -118,3 +118,28 @@ footer { text-align: center; font-size: 11px; color: var(--muted); }
   .cards { grid-template-columns: 1fr 1fr; }
   .charm small { display: none; }
 }
+
+/* ── 베팅 칩 ───────────────────────── */
+.hand { background: var(--panel); border-radius: var(--radius); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+.hand-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.hand-chips { display: flex; gap: 10px; justify-content: center; min-height: 84px; align-items: center; }
+.chip { display: flex; flex-direction: column; align-items: center; gap: 4px; background: none; border: none; padding: 4px; transition: transform .15s; }
+.chip .token, .token-lg { width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; font-size: 22px;
+  background: radial-gradient(circle, #0000 52%, var(--c) 53%, var(--c) 62%, #fff8 63%, #fff8 66%, var(--c) 67%), var(--c);
+  border: 3px dashed #fff6; box-shadow: 0 3px 0 #0008; }
+.token-lg { width: 46px; height: 46px; font-size: 18px; }
+.chip small { font-size: 10px; }
+.chip:hover:not(:disabled) { transform: translateY(-3px); }
+.chip.selected { transform: translateY(-8px); }
+.chip.selected .token { box-shadow: 0 0 0 3px var(--gold), 0 6px 12px #000a; border-color: var(--gold); }
+.chip-desc { margin: 0; font-size: 12px; color: var(--muted); text-align: center; min-height: 1.4em; }
+.chip-desc b { color: var(--gold); }
+.pouch { display: flex; flex-direction: column; gap: 4px; }
+.pouch-row { display: flex; align-items: center; gap: 6px; }
+.pouch-row span { flex: 1; }
+.pouch-row button { padding: 4px 8px; font-size: 12px; }
+.ticket { color: #f28ac0; }
+.augs { display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; font-size: 11px; }
+.augs span { background: #2a2233; border: 1px solid #4a3a5a; padding: 2px 8px; border-radius: 10px; }
+.card.booth { border-color: #6a3a55; }
+.call { margin-top: 12vh; }

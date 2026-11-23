@@ -1,6 +1,11 @@
 // 엔진 이벤트 → 사람이 읽는 로그 문장
 import { ITEMS } from '../core/items.js';
 import { CHARMS } from '../core/charms.js';
+import { CHIPS } from '../core/chips.js';
+import { AUGMENTS } from '../core/augments.js';
+import { TICKET_GOODS } from '../core/tickets.js';
+
+const chip = (t) => `${CHIPS[t].icon} ${CHIPS[t].name}`;
 
 const who = (x) => (x === 'player' ? '당신' : '딜러');
 const trig = (t = []) => (t.length ? ` [${t.map((x) => `${x.icon}${x.label}`).join(', ')}]` : '');
@@ -17,16 +22,27 @@ export function describe(e) {
     case 'damage': return `${who(e.who)} 체력 -${e.amount} (남은 ${e.hp})${trig(e.triggers)}`;
     case 'dodge': return `피해를 피했다!${trig(e.triggers)}`;
     case 'heat': return `열기 +${e.gain} → ${e.heat}${trig(e.triggers)}`;
-    case 'score': return `득점 ${e.chips} × ${e.mult} = ${e.points}${trig(e.triggers)}`;
+    case 'score': return `득점 ${e.stake} × ${e.mult} = ${e.points}${trig(e.triggers)}`;
     case 'itemUsed': return `${ITEMS[e.id].icon} ${ITEMS[e.id].name} 사용`;
     case 'peek': return `현재 탄은… ${e.live ? '실탄' : '공포탄'}`;
     case 'eject': return `배출된 탄: ${e.live ? '실탄' : '공포탄'}`;
     case 'empower': return '강화탄 장전 완료';
     case 'heal': return `체력 +${e.amount}`;
-    case 'stageClear': return `★ 스테이지 클리어! ${e.score}/${e.quota} · 코인 +${e.coins}${e.bonus ? ` (초과 보너스 ${e.bonus})` : ''}${trig(e.triggers)}`;
+    case 'stageClear': return `★ 스테이지 클리어! ${e.score}/${e.quota} · 코인 +${e.coins}${e.bonus ? ` (초과 보너스 ${e.bonus})` : ''} · 티켓 +${e.tickets} · ⚪화이트 칩 +${e.giftChips}${trig(e.triggers)}`;
+    case 'phoneRing': return '📞 따르릉… 전화가 온다';
+    case 'augment': return `증강: ${AUGMENTS[e.id].icon} ${AUGMENTS[e.id].name}`;
+    case 'boughtBooth': return `티켓 교환: ${(e.kind === 'charm' ? CHARMS : TICKET_GOODS)[e.id].name} (-${e.price}🎟️)`;
+    case 'stipend': return `수당 +${e.coins} 코인`;
     case 'gameOver': return e.reason === 'dead' ? '☠ 사망' : `☠ 할당량 미달 (${e.score}/${e.quota})`;
     case 'victory': return '🏆 모든 스테이지 돌파!';
-    case 'bought': return `구매: ${(e.kind === 'charm' ? CHARMS : ITEMS)[e.id].name} (-${e.price})`;
+    case 'bought': return `구매: ${({ charm: CHARMS, item: ITEMS, chip: CHIPS })[e.kind][e.id].name} (-${e.price})`;
+    case 'bet': return `베팅: ${chip(e.chip)}`;
+    case 'draw': return `칩 뽑기: ${e.chips.map((t) => CHIPS[t].icon).join(' ')}`;
+    case 'pouchShuffle': return `버린 칩 ${e.count}개를 주머니에 다시 섞음`;
+    case 'chipEffect': return `${chip(e.chip)}${trig(e.triggers)}`;
+    case 'chipReturned': return `${chip(e.chip)} 손패로 복귀${trig(e.triggers)}`;
+    case 'chipBroken': return `${chip(e.chip)} 산산조각!`;
+    case 'chipRemoved': return `${chip(e.chip)} 주머니에서 제거 (-${e.cost})`;
     case 'sold': return `판매: ${CHARMS[e.id].name} (+${e.price})`;
     case 'reroll': return `상품 새로고침 (-${e.cost})`;
     case 'spin': return `슬롯: ${e.label}${trig(e.triggers)}`;

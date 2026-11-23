@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { newRun, act } from '../src/core/engine.js';
-import { rigged } from './helpers.js';
+import { rigged, clearStage } from './helpers.js';
 
 test('자신에게 공포탄: 열기 +1, 득점, 턴 유지', () => {
   const s = rigged([false, true, true]);
@@ -12,7 +12,7 @@ test('자신에게 공포탄: 열기 +1, 득점, 턴 유지', () => {
   assert.ok(ev.some((e) => e.type === 'score' && e.points === 10));
 });
 
-test('딜러 적중: 칩 × 열기, 턴 넘어감', () => {
+test('딜러 적중: 판돈 × 열기, 턴 넘어감', () => {
   const s = rigged([true, false, true], { heat: 3 });
   act(s, { type: 'shoot', target: 'dealer' });
   assert.equal(s.duel.score, 30);
@@ -51,11 +51,13 @@ test('딜러 처치 + 할당량 미달 → 게임 오버', () => {
   assert.equal(s.result.reason, 'quota');
 });
 
-test('딜러 처치 + 할당량 달성 → 상점, 코인 지급', () => {
+test('딜러 처치 + 할당량 달성 → 전화 → 상점, 코인 지급', () => {
   const s = rigged([true, true], { heat: 5 });
   s.dealer.hp = 1;
   const coins = s.player.coins;
   act(s, { type: 'shoot', target: 'dealer' });
+  assert.equal(s.phase, 'call');
+  act(s, { type: 'answerCall', index: 0 });
   assert.equal(s.phase, 'shop');
   assert.ok(s.player.coins > coins);
   assert.equal(s.shop.charms.length, 3);
@@ -76,7 +78,7 @@ test('마지막 의식: 마지막 탄 적중 시 ×3', () => {
   assert.equal(s.duel.score, 30);
 });
 
-test('강화탄: 피해 2, 칩 ×2', () => {
+test('강화탄: 피해 2, 판돈 ×2', () => {
   const s = rigged([true, false, false], { items: ['hollow'] });
   act(s, { type: 'useItem', index: 0 });
   act(s, { type: 'shoot', target: 'dealer' });
@@ -93,10 +95,10 @@ test('돋보기는 현재 탄을 알려준다', () => {
 });
 
 test('상점: 구매, 판매, 슬롯머신, 다음 스테이지', () => {
-  const s = rigged([true, true], { heat: 5 });
-  s.dealer.hp = 1;
-  act(s, { type: 'shoot', target: 'dealer' });
+  const s = rigged([true, true]);
+  clearStage(s);
   s.player.coins = 50;
+  s.player.mods.discount = 0;
   const id = s.shop.charms[0];
   act(s, { type: 'buyCharm', index: 0 });
   assert.deepEqual(s.player.charms, [id]);
