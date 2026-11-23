@@ -1,16 +1,16 @@
 // UI 컨트롤러: 엔진에 행동을 보내고, 3D 씬과 HTML HUD를 갱신한다.
-import { newRun, act, betSlots, chamberLimit } from '../core/engine.js';
-import { CONFIG } from '../core/config.js';
-import { CHARMS, maxHp } from '../core/charms.js';
-import { CHIPS, betText, previewBets } from '../core/chips.js';
-import { ITEMS } from '../core/items.js';
-import { AUGMENTS } from '../core/augments.js';
-import { describe } from './describe.js';
-import { renderShop, renderCall, renderEnd, renderPaytable } from './panels.js';
-import { renderManual, MANUAL_PAGES } from './manual.js';
-import { createScene } from './scene3d.js';
-import { initAudio, playEvents, sfx, toggleMute, isMuted } from './audio.js';
-import { createVersusUI } from './versus-ui.js';
+import { newRun, act, betSlots, chamberLimit } from '../core/engine.js?v=mwsw8wdn';
+import { CONFIG } from '../core/config.js?v=mwsw8wdn';
+import { CHARMS, maxHp } from '../core/charms.js?v=mwsw8wdn';
+import { CHIPS, betText, previewBets } from '../core/chips.js?v=mwsw8wdn';
+import { ITEMS } from '../core/items.js?v=mwsw8wdn';
+import { AUGMENTS } from '../core/augments.js?v=mwsw8wdn';
+import { describe } from './describe.js?v=mwsw8wdn';
+import { renderShop, renderCall, renderEnd, renderPaytable } from './panels.js?v=mwsw8wdn';
+import { renderManual, MANUAL_PAGES } from './manual.js?v=mwsw8wdn';
+import { createScene } from './scene3d.js?v=mwsw8wdn';
+import { initAudio, playEvents, sfx, toggleMute, isMuted } from './audio.js?v=mwsw8wdn';
+import { createVersusUI } from './versus-ui.js?v=mwsw8wdn';
 
 const params = new URLSearchParams(location.search);
 const FAST = params.has('fast');

@@ -1,9 +1,9 @@
 // 홈 화면 + 1:1 결투(같은 기기 / 온라인) UI.
 // 3D 씬은 로그라이크와 같은 테이블을 쓴다: 나는 앞자리('player'), 상대는 딜러 자리('dealer').
-import { newVersus, actVersus, viewFor, VS } from '../core/versus.js';
-import { createOnlineMatch } from '../core/online.js';
-import { ITEMS } from '../core/items.js';
-import { openPeerRoom, randomCode, normalizeCode } from './net-peer.js';
+import { newVersus, actVersus, viewFor, VS } from '../core/versus.js?v=mwsw8wdn';
+import { createOnlineMatch } from '../core/online.js?v=mwsw8wdn';
+import { ITEMS } from '../core/items.js?v=mwsw8wdn';
+import { openPeerRoom, randomCode, normalizeCode } from './net-peer.js?v=mwsw8wdn';
 
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 

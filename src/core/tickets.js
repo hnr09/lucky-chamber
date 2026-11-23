@@ -1,8 +1,8 @@
 // 티켓 부스: 코인과 별개인 두 번째 화폐 '티켓'으로 사는 특별 상품.
 // 희귀 부적(일반 상점에는 안 나옴)과 영구 강화가 있다.
-import { CHARMS, CHARM_IDS } from './charms.js';
-import { CHIP_IDS, makeChip } from './chips.js';
-import { CONFIG } from './config.js';
+import { CHARMS, CHARM_IDS } from './charms.js?v=mwsw8wdn';
+import { CHIP_IDS, makeChip } from './chips.js?v=mwsw8wdn';
+import { CONFIG } from './config.js?v=mwsw8wdn';
 
 export const TICKET_GOODS = {
   heart:    { name: '예비 심장', icon: '🫀', price: 2, desc: '최대 체력 +1, 즉시 1 회복', apply: (s) => { s.player.mods.maxHp += 1; s.player.hp += 1; } },

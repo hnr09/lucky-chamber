@@ -2,16 +2,16 @@
 // UI는 act(state, action)만 호출하고, 반환된 이벤트 배열로 연출/로그를 만든다.
 //
 // phase: 'player' | 'dealer' | 'call'(전화: 증강 선택) | 'shop' | 'gameOver' | 'victory'
-import { CONFIG, stageSpec } from './config.js';
-import { createRng } from './rng.js';
-import { loadChamber } from './chamber.js';
-import { maxHp } from './charms.js';
-import { runHook } from './hooks.js';
-import { CHIPS, STARTING_POUCH, makeChip, allChips } from './chips.js';
-import { ITEM_IDS } from './items.js';
-import { AUGMENTS, BASE_MODS, rollCall } from './augments.js';
-import { dealerDecide } from './dealer.js';
-import * as shop from './shop.js';
+import { CONFIG, stageSpec } from './config.js?v=mwsw8wdn';
+import { createRng } from './rng.js?v=mwsw8wdn';
+import { loadChamber } from './chamber.js?v=mwsw8wdn';
+import { maxHp } from './charms.js?v=mwsw8wdn';
+import { runHook } from './hooks.js?v=mwsw8wdn';
+import { CHIPS, STARTING_POUCH, makeChip, allChips } from './chips.js?v=mwsw8wdn';
+import { ITEM_IDS } from './items.js?v=mwsw8wdn';
+import { AUGMENTS, BASE_MODS, rollCall } from './augments.js?v=mwsw8wdn';
+import { dealerDecide } from './dealer.js?v=mwsw8wdn';
+import * as shop from './shop.js?v=mwsw8wdn';
 
 export const rngOf = (state) => createRng(state.rng);
 

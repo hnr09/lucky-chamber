@@ -89,6 +89,14 @@ PixiJS로 바꿔도 엔진은 그대로 쓴다.
   - 방장이 게임을 진행하고(`src/core/online.js`), 참가자 화면에는 탄 순서가 가지 않는다.
   - 일부 회사·학교 네트워크처럼 P2P 연결을 막는 곳에서는 접속이 안 될 수 있다.
 
+### 배포 전 캐시 무효화
+
+```bash
+npm run bump
+```
+
+모든 모듈 주소에 `?v=버전`을 붙여서, Pages 캐시 때문에 옛 파일이 섞여 뜨는 일을 막는다.
+
 ### GitHub Pages로 공개하기
 
 레포 **Settings → Pages → Build and deployment**에서 Source를 *Deploy from a branch*,

@@ -3,7 +3,7 @@
 // - 참가자(guest, 플레이어 1)는 자기 행동만 presence에 싣는다 ({n, action}: n이 오르면 새 행동).
 // - presence는 '마지막 값'만 전달되므로, 참가자는 방장의 새 화면을 받기 전엔 다음 행동을 보내지 않는다.
 // room 인터페이스: presence(patch), onPeers(handler) → unsubscribe, peers()
-import { newVersus, actVersus, viewFor, eventsFor } from './versus.js';
+import { newVersus, actVersus, viewFor, eventsFor } from './versus.js?v=mwsw8wdn';
 
 export function createOnlineMatch({ room, role, seed, onUpdate, onStatus }) {
   const me = role === 'host' ? 0 : 1;

@@ -1,9 +1,9 @@
 // 3D 테이블 씬 (Three.js). 게임 규칙은 모르고, 상태를 그리고 이벤트를 연출만 한다.
 // 레트로 로우폴리 스타일: 저해상도 렌더 → 픽셀 확대, 플랫 셰이딩, 안개, 흔들리는 전등.
 import * as THREE from 'three';
-import { CHIPS } from '../core/chips.js';
-import { CHARMS } from '../core/charms.js';
-import { CONFIG } from '../core/config.js';
+import { CHIPS } from '../core/chips.js?v=mwsw8wdn';
+import { CHARMS } from '../core/charms.js?v=mwsw8wdn';
+import { CONFIG } from '../core/config.js?v=mwsw8wdn';
 
 const PIXEL_SCALE = 3; // 클수록 더 도트처럼 보인다
 const HOLD = {

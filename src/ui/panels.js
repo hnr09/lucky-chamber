@@ -1,12 +1,12 @@
 // 오버레이 패널: 상점 / 전화 / 게임 종료
-import { CONFIG, stageSpec } from '../core/config.js';
-import { CHARMS } from '../core/charms.js';
-import { CHIPS, allChips, betText } from '../core/chips.js';
-import { ITEMS } from '../core/items.js';
-import { GLYPH } from '../core/reels.js';
-import { sellPrice, priceOf } from '../core/shop.js';
-import { AUGMENTS } from '../core/augments.js';
-import { TICKET_GOODS, boothPrice } from '../core/tickets.js';
+import { CONFIG, stageSpec } from '../core/config.js?v=mwsw8wdn';
+import { CHARMS } from '../core/charms.js?v=mwsw8wdn';
+import { CHIPS, allChips, betText } from '../core/chips.js?v=mwsw8wdn';
+import { ITEMS } from '../core/items.js?v=mwsw8wdn';
+import { GLYPH } from '../core/reels.js?v=mwsw8wdn';
+import { sellPrice, priceOf } from '../core/shop.js?v=mwsw8wdn';
+import { AUGMENTS } from '../core/augments.js?v=mwsw8wdn';
+import { TICKET_GOODS, boothPrice } from '../core/tickets.js?v=mwsw8wdn';
 
 export function renderShop(state, toast) {
   const { shop: s, player: p } = state;
@@ -103,6 +103,7 @@ export function renderEnd(state) {
     <h2>${title}</h2>
     <p>스테이지 ${r.stage} 도달 · 시드 ${state.seed}</p>
     <div class="row">
+      <button data-act="goHome">🏠 홈으로</button>
       <button data-act="retry">같은 시드로 다시</button>
       <button class="primary" data-act="restart">새 게임</button>
     </div>

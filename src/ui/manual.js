@@ -1,5 +1,5 @@
 // 게임 설명서: 첫 실행 때 자동으로 열리고, 하단 '📖 설명서' 버튼으로 언제든 다시 본다.
-import { CONFIG, stageSpec } from '../core/config.js';
+import { CONFIG, stageSpec } from '../core/config.js?v=mwsw8wdn';
 
 const PAGES = [
   {

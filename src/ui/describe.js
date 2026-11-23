@@ -1,9 +1,9 @@
 // 엔진 이벤트 → 사람이 읽는 로그 문장
-import { ITEMS } from '../core/items.js';
-import { CHARMS } from '../core/charms.js';
-import { CHIPS } from '../core/chips.js';
-import { AUGMENTS } from '../core/augments.js';
-import { TICKET_GOODS } from '../core/tickets.js';
+import { ITEMS } from '../core/items.js?v=mwsw8wdn';
+import { CHARMS } from '../core/charms.js?v=mwsw8wdn';
+import { CHIPS } from '../core/chips.js?v=mwsw8wdn';
+import { AUGMENTS } from '../core/augments.js?v=mwsw8wdn';
+import { TICKET_GOODS } from '../core/tickets.js?v=mwsw8wdn';
 
 const chip = (t) => `${CHIPS[t].icon} ${CHIPS[t].name}`;
 

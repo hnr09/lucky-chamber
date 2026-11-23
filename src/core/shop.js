@@ -1,11 +1,11 @@
-import { CONFIG } from './config.js';
-import { CHARMS, CHARM_IDS, maxHp } from './charms.js';
-import { runHook } from './hooks.js';
-import { CHIPS, CHIP_IDS, makeChip, allChips } from './chips.js';
-import { ITEMS, ITEM_IDS } from './items.js';
-import { createRng } from './rng.js';
-import { spinReels } from './reels.js';
-import { rollBooth, boothPrice, TICKET_GOODS } from './tickets.js';
+import { CONFIG } from './config.js?v=mwsw8wdn';
+import { CHARMS, CHARM_IDS, maxHp } from './charms.js?v=mwsw8wdn';
+import { runHook } from './hooks.js?v=mwsw8wdn';
+import { CHIPS, CHIP_IDS, makeChip, allChips } from './chips.js?v=mwsw8wdn';
+import { ITEMS, ITEM_IDS } from './items.js?v=mwsw8wdn';
+import { createRng } from './rng.js?v=mwsw8wdn';
+import { spinReels } from './reels.js?v=mwsw8wdn';
+import { rollBooth, boothPrice, TICKET_GOODS } from './tickets.js?v=mwsw8wdn';
 
 // 증강 '단골 할인' 적용 가격
 export const priceOf = (state, base) => Math.max(1, base - (state.player.mods?.discount ?? 0));

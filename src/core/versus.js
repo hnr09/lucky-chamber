@@ -8,8 +8,8 @@
 //   - 나를 쏴서 공포탄이면 배수 +1, 내 차례 유지. 실탄이면 체력 -1, 차례 넘어감.
 // - 배수(이 게임의 고유 규칙): 배수 3 이상에서 상대를 실탄으로 맞히면 피해 2. 재장전하면 1로.
 // - 아이템: 돋보기(현재 탄 확인, 나만 앎) · 배출 레버(현재 탄 버리고 공개) · 강화탄(다음 실탄 피해 +1) · 붕대(체력 +1)
-import { createRng } from './rng.js';
-import { ITEMS } from './items.js';
+import { createRng } from './rng.js?v=mwsw8wdn';
+import { ITEMS } from './items.js?v=mwsw8wdn';
 
 export const VS = {
   hp: 4,
