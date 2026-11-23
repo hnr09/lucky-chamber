@@ -130,19 +130,22 @@ test('상점: 칩 구매/제거', () => {
   assert.ok(allChips(s.player.pouch).length >= CONFIG.minPouch);
 });
 
-test('베팅 배당은 자신에게 쏜 공포탄 득점에도 적용된다', () => {
+test('나를 쏴서 공포탄이면 점수는 없고, 건 판돈 칩은 버려진다', () => {
   const s = rigged([false, true, true], { hand: ['red'] });
-  shoot(s, 'self', 0);
-  assert.equal(s.duel.score, (5 + 20) * 2);
+  const ev = shoot(s, 'self', 0);
+  assert.equal(s.duel.score, 0);
+  assert.ok(!ev.some((e) => e.type === 'score'));
+  assert.equal(s.duel.heat, 2);
 });
 
-test('블루 칩: 배당 배수 +1 + 능력 열기 +1', () => {
-  const s = rigged([false, true, true], { hand: ['blue'] });
-  const ev = shoot(s, 'self', 0);
-  const sc = lastOf(ev, 'score');
+test('블루 칩: 공포탄으로 배수 +2, 딜러 적중 시 배당 배수 +1', () => {
+  const s = rigged([false, true, true], { hand: ['blue', 'blue'] });
+  shoot(s, 'self', 0);
   assert.equal(s.duel.heat, 3);
+  const ev = shoot(s, 'dealer', 0);
+  const sc = lastOf(ev, 'score');
   assert.equal(sc.mult, 4);
-  assert.equal(sc.points, 5 * 4);
+  assert.equal(sc.points, 10 * 4);
 });
 
 test('모든 칩은 배당표 설명을 가진다', async () => {

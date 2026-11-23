@@ -6,7 +6,7 @@ export const BASE_MODS = { baseStake: 0, startHeat: 0, handSize: 0, maxHp: 0, di
 
 export const AUGMENTS = {
   sharpen:    { name: '날 세우기',   icon: '🗡️', desc: '딜러 적중 기본 판돈 +5', apply: (s) => { s.player.mods.baseStake += 5; } },
-  warmup:     { name: '예열',       icon: '♨️', desc: '재장전할 때 열기가 1 더 높게 시작', apply: (s) => { s.player.mods.startHeat += 1; } },
+  warmup:     { name: '예열',       icon: '♨️', desc: '재장전할 때 배수가 2부터 시작 (원래 1)', apply: (s) => { s.player.mods.startHeat += 1; } },
   bigHand:    { name: '넓은 손',     icon: '🖐️', desc: '베팅 칩 손패 +1', max: 2, apply: (s) => { s.player.mods.handSize += 1; } },
   vitality:   { name: '강심장',     icon: '❤️', desc: '최대 체력 +1, 즉시 1 회복', apply: (s) => { s.player.mods.maxHp += 1; s.player.hp += 1; } },
   discount:   { name: '단골 할인',   icon: '🏷️', desc: '상점의 모든 코인 가격 -1 (최소 1)', max: 2, apply: (s) => { s.player.mods.discount += 1; } },

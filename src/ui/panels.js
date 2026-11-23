@@ -121,6 +121,6 @@ export function renderPaytable(state) {
   return `<aside class="paytable">
     <h4>배당표 <small>건 칩 → 부적 순서로 계산</small></h4>
     <table>${rows}</table>
-    <p class="rule">득점 = 판돈 × 배수<br>딜러 적중 판돈 ${CONFIG.baseHitStake + state.player.mods.baseStake} · 자신 공포탄 판돈 ${CONFIG.selfBlankStake}<br>배수 = 현재 열기 ${state.duel.heat}</p>
+    <p class="rule">득점 = 판돈 × 배수<br>점수는 딜러 적중 때만 · 기본 판돈 ${CONFIG.baseHitStake + state.player.mods.baseStake}<br>현재 쌓인 배수 ×${state.duel.heat} (나를 쏴서 공포탄 +1, 재장전 시 1)</p>
   </aside>`;
 }

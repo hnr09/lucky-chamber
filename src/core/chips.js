@@ -16,8 +16,8 @@ export const CHIPS = {
   },
   blue: {
     name: '블루 칩', icon: '🔵', color: '#3f7fd9', price: 3, bet: { mult: 1 },
-    ability: '자신에게 공포탄이면 열기 +1 추가',
-    onHeatGain(ctx) { ctx.gain += 1; return '열기 +1'; },
+    ability: '나를 쏴서 공포탄이면 쌓이는 배수 +1 추가',
+    onHeatGain(ctx) { ctx.gain += 1; return '배수 +1'; },
   },
   gold: {
     name: '골드 칩', icon: '🟡', color: '#f2c14e', price: 4, bet: { stake: 5 },

@@ -123,6 +123,9 @@ export function playEvents(events, { jackpot = 0, state } = {}) {
       case 'chipReturned':
         if (e.coins) s('coin-double', { delay: fire + 0.4, volume: 0.5 });
         break;
+      case 'cashOut':
+        s('coin-bag', { volume: 0.8 });
+        break;
       case 'stageClear':
         s('level-complete', { delay: t + 0.3, volume: 0.8 });
         s('coin-bag', { delay: t + 0.9, volume: 0.8 });

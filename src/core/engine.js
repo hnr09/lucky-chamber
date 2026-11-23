@@ -59,6 +59,15 @@ const HANDLERS = {
     },
   },
   useItem: { phases: ['player'], run: useItem },
+  // 할당량을 채웠으면 언제든 정산하고 일어설 수 있다 (더 버티면 초과 보너스, 대신 총 맞을 위험)
+  cashOut: {
+    phases: ['player'],
+    run(state, _a, events) {
+      if (state.duel.score < state.duel.quota) return invalid(events, '할당량을 채워야 일어설 수 있다');
+      events.push({ type: 'cashOut' });
+      clearStage(state, events);
+    },
+  },
   dealerTurn: {
     phases: ['dealer'],
     run(state, _a, events) {
@@ -247,7 +256,6 @@ function fire(state, shooter, target, events) {
       damagePlayer(state, 1, events, true);
     } else {
       gainHeat(state, events);
-      score(state, { kind: 'selfBlank', stake: CONFIG.selfBlankStake, mult: d.heat, lastShell }, events);
       keepTurn = true;
     }
     settleBet(state, { live, target, hit: live && target === 'dealer' }, events);
@@ -319,16 +327,17 @@ function checkEnd(state, events) {
     return true;
   }
   if (state.dealer.hp > 0) return false;
-  clearStage(state, events);
+  clearStage(state, events, { kill: true });
   return true;
 }
 
-function clearStage(state, events) {
+function clearStage(state, events, { kill = false } = {}) {
   const d = state.duel;
   const spec = stageSpec(state.stage);
   // 초과 달성 보너스: 할당량의 2배마다 +3 코인 (로그 스케일, 최대 12). 큰 한 방이 돈이 된다.
   const bonus = Math.min(12, Math.floor(Math.log2(d.score / d.quota) * 3));
-  const ctx = { coins: spec.reward + bonus, state, rng: rngOf(state) };
+  const killBonus = kill ? CONFIG.killBonus : 0;
+  const ctx = { coins: spec.reward + bonus + killBonus, state, rng: rngOf(state) };
   const triggers = runHook(state, 'onStageEnd', ctx);
   state.player.coins += ctx.coins;
   // 티켓: 클리어 1장 + 할당량 2배 이상이면 1장 + 증강 보너스
@@ -339,7 +348,7 @@ function clearStage(state, events) {
   // 마일스톤 스테이지를 깨면 베팅 칸 +1
   const slotUp = CONFIG.betSlotMilestones.includes(state.stage);
   if (slotUp) state.player.mods.betSlots += 1;
-  events.push({ type: 'stageClear', tickets, giftChips: CONFIG.clearGiftChips, slotUp, betSlots: betSlots(state), stage: state.stage, score: d.score, quota: d.quota, base: spec.reward, bonus, coins: ctx.coins, triggers });
+  events.push({ type: 'stageClear', killBonus, tickets, giftChips: CONFIG.clearGiftChips, slotUp, betSlots: betSlots(state), stage: state.stage, score: d.score, quota: d.quota, base: spec.reward, bonus, coins: ctx.coins, triggers });
 
   if (state.stage >= CONFIG.finalStage) {
     state.phase = 'victory';

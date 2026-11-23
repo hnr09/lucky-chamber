@@ -3,13 +3,13 @@ import assert from 'node:assert/strict';
 import { newRun, act } from '../src/core/engine.js';
 import { rigged, clearStage } from './helpers.js';
 
-test('자신에게 공포탄: 열기 +1, 득점, 턴 유지', () => {
+test('자신에게 공포탄: 배수 +1, 점수 없음, 턴 유지', () => {
   const s = rigged([false, true, true]);
   const ev = act(s, { type: 'shoot', target: 'self' });
   assert.equal(s.duel.heat, 2);
-  assert.equal(s.duel.score, 5 * 2);
+  assert.equal(s.duel.score, 0);
   assert.equal(s.phase, 'player');
-  assert.ok(ev.some((e) => e.type === 'score' && e.points === 10));
+  assert.ok(ev.some((e) => e.type === 'heat' && e.heat === 2));
 });
 
 test('딜러 적중: 판돈 × 열기, 턴 넘어감', () => {

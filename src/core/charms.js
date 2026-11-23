@@ -2,7 +2,7 @@
 // 부적은 슬롯 순서대로 발동하므로 (+배수 → ×배수) 순서가 점수를 바꾼다.
 //
 // 훅 목록
-//   onScore(ctx)          ctx: { kind: 'hit'|'selfBlank', stake, mult, lastShell, state, rng }
+//   onScore(ctx)          ctx: { kind: 'hit', stake, mult, lastShell, killShot, state, rng }  (점수는 딜러 적중에서만)
 //   onHeatGain(ctx)       ctx: { gain, state, rng }
 //   onIncomingDamage(ctx) ctx: { amount, cancelled, state, rng }
 //   onStageEnd(ctx)       ctx: { coins, state, rng }
@@ -14,15 +14,15 @@ export const CHARMS = {
     onScore(ctx) { if (ctx.kind === 'hit') { ctx.stake += 6; return '+6 판돈'; } },
   },
   steadyNerve: {
-    name: '강철 신경', icon: '🫀', price: 4, desc: '자신에게 공포탄을 쏴서 얻는 판돈 +10',
-    onScore(ctx) { if (ctx.kind === 'selfBlank') { ctx.stake += 10; return '+10 판돈'; } },
+    name: '강철 신경', icon: '🫀', price: 4, desc: '쌓인 배수가 3 이상일 때 딜러 적중 판돈 +15',
+    onScore(ctx) { if (ctx.state.duel.heat >= 3) { ctx.stake += 15; return '+15 판돈'; } },
   },
   coldHands: {
-    name: '차가운 손', icon: '🧤', price: 5, desc: '공포탄으로 얻는 열기 +1',
-    onHeatGain(ctx) { ctx.gain += 1; return '열기 +1'; },
+    name: '차가운 손', icon: '🧤', price: 5, desc: '나를 쏴서 공포탄이면 배수가 1 더 오른다',
+    onHeatGain(ctx) { ctx.gain += 1; return '배수 +1'; },
   },
   hotStreak: {
-    name: '과열', icon: '🔥', price: 5, desc: '열기 4 이상일 때 배수 +2',
+    name: '과열', icon: '🔥', price: 5, desc: '쌓인 배수가 4 이상이면 득점 배수 +2',
     onScore(ctx) { if (ctx.state.duel.heat >= 4) { ctx.mult += 2; return '+2 배수'; } },
   },
   lastRites: {
@@ -59,8 +59,8 @@ export const CHARMS = {
     onScore(ctx) { const n = ctx.state.duel.bets.length; if (n) { ctx.stake += 8 * n; return `+${8 * n} 판돈`; } },
   },
   fearless: {
-    name: '겁 없는 자', icon: '😈', rare: true, ticketPrice: 3, price: 8, desc: '자신에게 쏜 공포탄 득점 배수 ×3',
-    onScore(ctx) { if (ctx.kind === 'selfBlank') { ctx.mult *= 3; return '×3 배수'; } },
+    name: '겁 없는 자', icon: '😈', rare: true, ticketPrice: 3, price: 8, desc: '나를 쏴서 공포탄이면 배수가 2 더 오른다 (+1 대신 +3)',
+    onHeatGain(ctx) { ctx.gain += 2; return '배수 +2'; },
   },
 };
 export const CHARM_IDS = Object.keys(CHARMS);

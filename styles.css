@@ -340,3 +340,32 @@ i.hp.me.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
 .manual-body .formula-big { text-align: center; font-family: var(--display); font-size: 26px; margin: 10px 0 14px; }
 .manual-body .formula-big span { padding: 2px 12px; }
 @media (max-width: 480px) { .manual-body .two { grid-template-columns: 1fr; } .manual-body { font-size: 13px; } }
+
+/* 판돈 / 배수 이름표 */
+.formula .lbl { display: inline-flex; flex-direction: column; align-items: center; gap: 1px; }
+.formula .lbl i { font-style: normal; font-size: 10px; color: #cbb89a; letter-spacing: 1px; }
+.formula .x { align-self: flex-start; margin-top: 2px; }
+/* 배수 상승 연출 */
+.flash .heatup { font-family: var(--display); font-size: 30px; color: #ff9a3a; letter-spacing: 2px;
+  text-shadow: 0 0 12px #ff5a00, 3px 3px 0 #000; display: flex; flex-direction: column; align-items: center; }
+.flash .heatup b { font-weight: 400; color: #ffd84a; font-size: 38px; }
+.flash .heatup small { font-family: inherit; font-size: 13px; color: #f3e6d2; letter-spacing: 0; text-shadow: 1px 1px 0 #000; }
+
+/* 남은 탄 / 확률 / 힌트 / 정산 버튼 */
+.odds { display: flex; gap: 10px; align-items: center; justify-content: center; flex-wrap: wrap; font-size: 12px;
+  background: #000b; border: 2px solid #3a1c14; padding: 4px 10px; align-self: center; border-radius: 4px; }
+.odds .shells { display: flex; gap: 3px; }
+.odds .sh { width: 8px; height: 20px; border-radius: 3px 3px 2px 2px; border-bottom: 4px solid #c89a3c; display: inline-block; }
+.odds .sh.live { background: var(--live); }
+.odds .sh.blank { background: var(--blank); }
+.odds .pct b { font-family: var(--display); font-weight: 400; font-size: 18px; color: var(--gold); }
+b.red { color: #ff6a5a; } b.blue { color: #8ab4ff; } b.gold { color: var(--gold); }
+.hint { margin: 0; text-align: center; font-size: 13px; color: #e8d8c0; text-shadow: 0 1px 0 #000; background: #0008; padding: 3px 10px; align-self: center; border-radius: 4px; }
+.shoot small b { color: #ffd84a; font-weight: 700; }
+.cashout { font-family: var(--display); font-size: 20px; letter-spacing: 2px; padding: 10px; border-radius: 3px; color: #1a1408;
+  background: linear-gradient(#ffd84a, #c9901a); border: 3px solid #000; box-shadow: 0 4px 0 #000, 0 0 18px #ffb00088; animation: cashpulse 1.2s ease-in-out infinite; }
+.cashout small { display: block; font-family: "Courier New", monospace; font-size: 11px; letter-spacing: 0; color: #3a2a08; }
+@keyframes cashpulse { 50% { box-shadow: 0 4px 0 #000, 0 0 30px #ffd84acc; } }
+@media (max-width: 480px) { .odds { font-size: 11px; gap: 6px; } .hint { font-size: 12px; } }
+.odds .hint { background: none; padding: 0; font-size: 12px; }
+.odds .pct small { margin-left: 3px; color: var(--gold); }

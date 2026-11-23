@@ -110,10 +110,11 @@ function dispatch(action) {
   if (jackpot && !FAST) scene.celebrate(jackpot, shot ? 650 : 0);
   playEvents(events, { jackpot, state });
   const clear = events.find((e) => e.type === 'stageClear');
+  const heatUp = events.find((e) => e.type === 'heat');
   const showFlash = () => {
     if (shot || sc || clear) {
       const key = Math.random();
-      flash = { shot, score: sc, jackpot, clear, key };
+      flash = { shot, score: sc, jackpot, clear, heatUp, key };
       fxEl.innerHTML = renderFlash();
       setTimeout(() => { if (flash?.key === key) { fxEl.innerHTML = ''; flash = null; } }, 2800);
     }
@@ -158,6 +159,26 @@ function render() {
   const baseStake = CONFIG.baseHitStake + p.mods.baseStake;
   const pv = previewBets(picked.map((c) => c.type), { stake: baseStake, mult: d.heat });
   const slots = betSlots(state);
+  // 남은 탄 (장전 때 공개된 수 - 이미 나온 탄) → 실탄 확률
+  const spentLive = d.spent.filter(Boolean).length;
+  const liveLeft = d.loaded.live - spentLive;
+  const blankLeft = d.loaded.blank - (d.spent.length - spentLive);
+  const pLive = d.knownCurrent !== null ? (d.knownCurrent ? 1 : 0) : liveLeft / Math.max(1, liveLeft + blankLeft);
+  const heatGain = 1 + (p.charms.includes('coldHands') ? 1 : 0) + (p.charms.includes('fearless') ? 2 : 0)
+    + picked.filter((c) => c.type === 'blue').length;
+  const met = d.score >= d.quota;
+  const playing = state.phase === 'player' || state.phase === 'dealer';
+  const hint = (() => {
+    if (state.phase === 'dealer') return '<span class="wait">딜러가 총을 집어 든다…</span>';
+    if (met) return '<b class="gold">할당량 달성!</b> 지금 정산하고 일어서거나, 더 버텨서 초과 보너스를 노려라';
+    if (d.knownCurrent === true) return '🔍 지금 탄은 <b class="red">실탄 확정</b> → 칩을 걸고 딜러를 쏴라';
+    if (d.knownCurrent === false) return '🔍 지금 탄은 <b class="blue">공포탄 확정</b> → 나를 쏴서 배수를 공짜로 올려라';
+    if (pLive === 0) return '남은 탄이 <b class="blue">전부 공포탄</b> → 나를 쏴서 배수를 공짜로 올려라';
+    if (pLive === 1) return '남은 탄이 <b class="red">전부 실탄</b> → 칩을 걸고 딜러를 쏴라';
+    if (pLive <= 0.34) return '공포탄이 많다 → <b>나를 쏴서 배수를 올릴</b> 기회';
+    if (pLive >= 0.6) return '실탄이 많다 → <b>테이블의 칩을 눌러 걸고</b> 딜러를 쏠 때';
+    return '반반이다… 배수를 더 쌓을지, 지금 딜러를 쏠지';
+  })();
 
   app.innerHTML = `
   <header class="hud-top">
@@ -169,8 +190,8 @@ function render() {
       <div class="dealer-hp"><small>딜러</small>${pips(dealer.hp, dealer.maxHp, 'hp dealer')}</div>
     </div>
   <div class="plate formula ${state.phase === 'call' || state.phase === 'shop' ? 'away' : ''}">
-    <span class="stake">${pv.stake}</span><span class="x">×</span><span class="mult">${pv.mult}</span>${picked.length ? `<span class="eq">= ${pv.points}</span>` : ''}
-    <small><b class="${d.chamberNo >= chamberLimit(state) ? 'last' : ''}">약실 ${d.chamberNo}/${chamberLimit(state)}</b> · 실탄 ${d.loaded.live} · 공포탄 ${d.loaded.blank} · 남은 ${d.shells.length}${d.empowered ? ' · 💥강화' : ''}</small>
+    <span class="lbl"><span class="stake">${pv.stake}</span><i>판돈</i></span><span class="x">×</span><span class="lbl" title="나를 쏴서 공포탄이 나올 때마다 +1, 재장전하면 1"><span class="mult">${pv.mult}</span><i>배수 🔥</i></span>${picked.length ? `<span class="eq">= ${pv.points}</span>` : ''}
+    <small><b class="${d.chamberNo >= chamberLimit(state) ? 'last' : ''}">약실 ${d.chamberNo}/${chamberLimit(state)}</b>${d.empowered ? ' · 💥강화' : ''}</small>
   </div>
     <div class="plate money"><b class="coin">${p.coins}<small>¢</small></b><b class="ticket">${p.tickets}<small>🎟️</small></b></div>
   </header>
@@ -181,14 +202,18 @@ function render() {
     <div class="charm-row">
       ${p.augments.map((id) => `<span class="aug" title="${AUGMENTS[id].name}: ${AUGMENTS[id].desc}">${AUGMENTS[id].icon}</span>`).join('')}
     </div>
-    <div class="chip-desc">${picked.length
+    ${playing ? `<div class="odds" title="남은 탄: 실탄 ${liveLeft} · 공포탄 ${blankLeft}">
+      <span class="shells">${'<i class="sh live"></i>'.repeat(Math.max(0, liveLeft))}${'<i class="sh blank"></i>'.repeat(Math.max(0, blankLeft))}</span>
+      <span class="pct">실탄 <b>${Math.round(pLive * 100)}%</b>${d.knownCurrent !== null ? '<small>확인됨</small>' : ''}</span>
+      <span class="hint">${hint}</span>
+    </div>` : ''}
+    ${picked.length ? `<div class="chip-desc">${picked.length
       ? `<div class="bet-head">베팅 ${picked.length}/${slots} <span class="seq">${picked.map((c) => CHIPS[c.type].icon).join('→')}</span> <small>고른 순서대로 발동 · 딜러 적중 시</small> <b class="pv">${pv.stake} × ${pv.mult} = ${pv.points}</b></div>
          <ol class="bet-list">${picked.map((c) => {
            const def = CHIPS[c.type];
            return `<li><b style="color:${def.color}">${def.icon} ${def.name}</b> <span class="bet">${betText(def.bet)}</span>${def.ability ? ` <small>${def.ability}</small>` : ''}</li>`;
          }).join('')}</ol>`
-      : state.phase === 'dealer' ? '<span class="wait">딜러가 총을 집어 든다…</span>'
-      : `테이블의 칩을 눌러 최대 <b>${slots}개</b>까지 베팅 · 주머니 ${p.pouch.draw.length} · 버림 ${p.pouch.discard.length}`}</div>
+      : ''}</div>` : ''}
     <div class="controls">
       <div class="me">
         <small>당신</small>
@@ -204,9 +229,10 @@ function render() {
       </div>
     </div>
     <div class="actions">
-      <button class="shoot dealer-btn" data-act="shoot" data-target="dealer" ${busy ? 'disabled' : ''}>딜러를 쏜다<small>실탄이면 득점 · 턴 넘김</small></button>
-      <button class="shoot self-btn" data-act="shoot" data-target="self" ${busy ? 'disabled' : ''}>나를 쏜다<small>공포탄이면 열기 +1 · 턴 유지</small></button>
+      <button class="shoot dealer-btn" data-act="shoot" data-target="dealer" ${busy ? 'disabled' : ''}>딜러를 쏜다<small>실탄이면 <b>+${pv.points}점</b> · 차례 넘어감</small></button>
+      <button class="shoot self-btn" data-act="shoot" data-target="self" ${busy ? 'disabled' : ''}>나를 쏜다<small>공포탄이면 <b>배수 ×${d.heat + heatGain}</b> · 실탄이면 체력 -1</small></button>
     </div>
+    ${met && state.phase === 'player' ? `<button class="cashout" data-act="cashOut" ${locked() ? 'disabled' : ''}>💰 정산하고 일어서기 <small>지금 ${d.score.toLocaleString()}점 · 할당량의 ×${(d.score / d.quota).toFixed(1)}</small></button>` : ''}
     ${toast ? `<p class="toast">${toast}</p>` : ''}
     <div class="meta">
       <button class="link" data-act="openManual">📖 설명서</button>
@@ -230,7 +256,7 @@ function render() {
 
 function renderFlash() {
   if (!flash) return '';
-  const { shot, score, jackpot, clear } = flash;
+  const { shot, score, jackpot, clear, heatUp } = flash;
   if (clear) {
     return `<div class="flash clear" data-k="${flash.key}">
       <div class="clear-title">할당량 달성</div>
@@ -240,6 +266,7 @@ function renderFlash() {
   }
   return `<div class="flash ${jackpot ? `jackpot j${jackpot}` : ''}" data-k="${flash.key}">
     ${jackpot ? `<div class="jp">${['', 'BIG WIN', 'JACKPOT', 'MEGA JACKPOT'][jackpot]}</div>` : ''}
+    ${heatUp ? `<div class="heatup">🔥 배수 UP <b>×${heatUp.heat}</b><small>다음에 딜러를 맞히면 ×${heatUp.heat}배</small></div>` : ''}
     ${shot ? `<div class="bang ${shot.live ? 'live' : 'blank'}">${shot.live ? 'BANG!' : '...click'}</div>` : ''}
     ${score ? `<div class="pts"><span class="stake">${score.stake}</span> × <span class="mult">${score.mult}</span> = <b>+${score.points.toLocaleString()}</b></div>
       <div class="trig">${score.triggers.map((t) => `<span>${t.icon} ${t.label}</span>`).join('')}</div>` : ''}

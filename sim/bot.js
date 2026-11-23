@@ -73,6 +73,8 @@ export function decide(state, opts = {}) {
   }
 
   // ── 결투: 플레이어 차례 ──
+  // 할당량을 채우면 욕심내지 않고 바로 정산 (greedy 옵션이면 배수 2배까지 버틴다)
+  if (d.score >= d.quota * (opts.greedy ? 2 : 1)) return { type: 'cashOut' };
   const { live, total } = remaining(d);
   const known = d.knownCurrent;
   const pLive = known === null ? live / total : known ? 1 : 0;
@@ -104,16 +106,10 @@ export function decide(state, opts = {}) {
     // 실탄 확률이 낮으면 칩을 아낀다
     return { type: 'shoot', target, chips: pLive >= 0.5 ? hit.picks : [] };
   }
-  // 자신 사격: 실탄 위험이 있으면 강철, 공포탄이면 열기를 올리는 블루, 확실한 공포탄이면 판돈 칩까지
+  // 자신 사격: 점수는 없으니 능력 칩만 건다 (실탄 위험 → 강철, 배수를 더 올리는 블루)
   const picks = [];
   const add = (t) => { const i = hand.findIndex((c, k) => c.type === t && !picks.includes(k)); if (i >= 0 && picks.length < slots) picks.push(i); };
   if (pLive > 0.2) add('steel');
   add('blue');
-  if (pLive === 0) {
-    const self = bestCombo(hand.filter((_, i) => !picks.includes(i)), slots - picks.length, { stake: CONFIG.selfBlankStake, mult: d.heat + 1 });
-    // bestCombo 인덱스는 필터된 배열 기준 → 원래 인덱스로 변환
-    const rest = hand.map((_, i) => i).filter((i) => !picks.includes(i));
-    for (const k of self.picks) picks.push(rest[k]);
-  }
   return { type: 'shoot', target, chips: picks };
 }
