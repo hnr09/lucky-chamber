@@ -1,6 +1,6 @@
 // 온라인 연결: WebRTC P2P (PeerJS). 서버 운영 없이 GitHub Pages 같은 정적 사이트에서 동작한다.
 // - 서로를 찾을 때만 PeerJS 공개 중계 서버(0.peerjs.com)를 쓰고, 게임 데이터는 두 브라우저가 직접 주고받는다.
-// - online.js가 쓰는 room 인터페이스(presence / onPeers / peers)를 그대로 흉내 낸다.
+// - 방장은 여러 참가자(최대 3명)의 연결을 받는다(hub), 참가자는 방장에게 연결한다(link).
 // - 테스트용: ?peerhost=localhost&peerport=9000 으로 로컬 PeerServer를 쓸 수 있다.
 
 const PEERJS_URL = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
@@ -44,78 +44,56 @@ const ERRORS = {
   'browser-incompatible': '이 브라우저는 온라인 대전을 지원하지 않는다.',
 };
 
-/**
- * 방을 열거나(host) 코드로 들어간다(guest). 연결 준비가 되면 room 객체로 resolve.
- * room: { code, presence(patch), onPeers(fn), peers(), onClose(fn), leave() }
- */
-export async function openPeerRoom({ code, host }) {
-  const Peer = await loadPeerJs();
-  const id = ID_PREFIX + code;
-  const peer = host ? new Peer(id, peerOptions()) : new Peer(peerOptions());
+function connectPeer(id, host) {
+  return loadPeerJs().then((Peer) => new Promise((resolve, reject) => {
+    const peer = host ? new Peer(id, peerOptions()) : new Peer(peerOptions());
+    const timer = setTimeout(() => { peer.destroy(); reject(new Error('연결 시간이 초과됐다. 다시 시도하자.')); }, 15000);
+    peer.on('error', (e) => { clearTimeout(timer); reject(new Error(ERRORS[e.type] ?? `연결 오류 (${e.type ?? e.message})`)); });
+    peer.on('open', () => { clearTimeout(timer); resolve(peer); });
+  }));
+}
 
-  let mine = {};
-  let theirs = null;
-  let conn = null;
-  const peerHandlers = new Set();
-  const closeHandlers = new Set();
-
-  const snapshot = () => {
-    const list = [{ peer: 'me', isMe: true, sameTab: true, presence: mine }];
-    if (theirs) list.push({ peer: 'them', isMe: false, sameTab: false, presence: theirs });
-    return list;
-  };
-  const notify = () => { const peers = snapshot(); for (const h of peerHandlers) h({ peers }); };
-  const send = () => { if (conn?.open) conn.send({ t: 'p', p: mine }); };
-
-  const attach = (c) => {
-    if (conn && conn.open) { c.on('open', () => c.close()); return; } // 1:1만 받는다
-    conn = c;
-    c.on('open', () => { send(); notify(); });
-    c.on('data', (msg) => {
-      if (msg && msg.t === 'p' && typeof msg.p === 'object') { theirs = msg.p; notify(); }
-    });
-    const gone = () => {
-      if (conn !== c) return;
-      conn = null;
-      theirs = null;
-      notify();
-      for (const h of closeHandlers) h();
-    };
+/** 방장: 방을 연다. hub: { code, onJoin, onLeave, onMessage, send, close } (online.js의 hub) */
+export async function openPeerHub(code) {
+  const peer = await connectPeer(ID_PREFIX + code, true);
+  const conns = new Map();
+  const h = { join: [], leave: [], msg: [] };
+  peer.on('connection', (c) => {
+    c.on('open', () => { conns.set(c.peer, c); h.join.forEach((f) => f(c.peer)); });
+    c.on('data', (m) => h.msg.forEach((f) => f(c.peer, m)));
+    const gone = () => { if (conns.delete(c.peer)) h.leave.forEach((f) => f(c.peer)); };
     c.on('close', gone);
     c.on('error', gone);
-  };
-
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('연결 시간이 초과됐다. 다시 시도하자.')), 15000);
-    peer.on('error', (e) => {
-      clearTimeout(timer);
-      reject(new Error(ERRORS[e.type] ?? `연결 오류 (${e.type ?? e.message})`));
-    });
-    peer.on('open', () => {
-      if (host) {
-        peer.on('connection', attach);
-        clearTimeout(timer);
-        resolve();
-      } else {
-        const c = peer.connect(id, { reliable: true, serialization: 'json' });
-        attach(c);
-        c.on('open', () => { clearTimeout(timer); resolve(); });
-      }
-    });
   });
-
   return {
     code,
-    presence(patch) {
-      mine = { ...mine, ...patch };
-      for (const k of Object.keys(patch)) if (patch[k] === null) delete mine[k];
-      send();
-      queueMicrotask(notify);
-      return Promise.resolve();
-    },
-    onPeers(h) { peerHandlers.add(h); queueMicrotask(() => h({ peers: snapshot() })); return () => peerHandlers.delete(h); },
-    peers: snapshot,
-    onClose(h) { closeHandlers.add(h); return () => closeHandlers.delete(h); },
-    leave() { try { conn?.close(); peer.destroy(); } catch { /* 이미 닫힘 */ } },
+    onJoin: (f) => h.join.push(f),
+    onLeave: (f) => h.leave.push(f),
+    onMessage: (f) => h.msg.push(f),
+    send: (id, m) => { const c = conns.get(id); if (c?.open) c.send(m); },
+    close: () => { try { peer.destroy(); } catch { /* 이미 닫힘 */ } },
+  };
+}
+
+/** 참가자: 코드로 방에 들어간다. link: { onMessage, send, onClose, close } (online.js의 link) */
+export async function openPeerLink(code) {
+  const peer = await connectPeer(null, false);
+  const c = peer.connect(ID_PREFIX + code, { reliable: true, serialization: 'json' });
+  const h = { msg: [], close: [] };
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(ERRORS['peer-unavailable'])), 10000);
+    peer.on('error', (e) => { clearTimeout(timer); reject(new Error(ERRORS[e.type] ?? `연결 오류 (${e.type})`)); });
+    c.on('open', () => { clearTimeout(timer); resolve(); });
+  });
+  c.on('data', (m) => h.msg.forEach((f) => f(m)));
+  const gone = () => h.close.forEach((f) => f());
+  c.on('close', gone);
+  c.on('error', gone);
+  return {
+    code,
+    onMessage: (f) => h.msg.push(f),
+    onClose: (f) => h.close.push(f),
+    send: (m) => { if (c.open) c.send(m); },
+    close: () => { try { c.close(); peer.destroy(); } catch { /* 이미 닫힘 */ } },
   };
 }

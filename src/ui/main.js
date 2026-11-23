@@ -1,16 +1,16 @@
 // UI 컨트롤러: 엔진에 행동을 보내고, 3D 씬과 HTML HUD를 갱신한다.
-import { newRun, act, betSlots, chamberLimit } from '../core/engine.js?v=mwsw8wdn';
-import { CONFIG } from '../core/config.js?v=mwsw8wdn';
-import { CHARMS, maxHp } from '../core/charms.js?v=mwsw8wdn';
-import { CHIPS, betText, previewBets } from '../core/chips.js?v=mwsw8wdn';
-import { ITEMS } from '../core/items.js?v=mwsw8wdn';
-import { AUGMENTS } from '../core/augments.js?v=mwsw8wdn';
-import { describe } from './describe.js?v=mwsw8wdn';
-import { renderShop, renderCall, renderEnd, renderPaytable } from './panels.js?v=mwsw8wdn';
-import { renderManual, MANUAL_PAGES } from './manual.js?v=mwsw8wdn';
-import { createScene } from './scene3d.js?v=mwsw8wdn';
-import { initAudio, playEvents, sfx, toggleMute, isMuted } from './audio.js?v=mwsw8wdn';
-import { createVersusUI } from './versus-ui.js?v=mwsw8wdn';
+import { newRun, act, betSlots, chamberLimit } from '../core/engine.js?v=mwswysnb';
+import { CONFIG } from '../core/config.js?v=mwswysnb';
+import { CHARMS, maxHp } from '../core/charms.js?v=mwswysnb';
+import { CHIPS, betText, previewBets } from '../core/chips.js?v=mwswysnb';
+import { ITEMS } from '../core/items.js?v=mwswysnb';
+import { AUGMENTS } from '../core/augments.js?v=mwswysnb';
+import { describe } from './describe.js?v=mwswysnb';
+import { renderShop, renderCall, renderEnd, renderPaytable } from './panels.js?v=mwswysnb';
+import { renderManual, MANUAL_PAGES } from './manual.js?v=mwswysnb';
+import { createScene } from './scene3d.js?v=mwswysnb';
+import { initAudio, playEvents, sfx, toggleMute, isMuted } from './audio.js?v=mwswysnb';
+import { createVersusUI, AIM_MODE } from './versus-ui.js?v=mwswysnb';
 
 const params = new URLSearchParams(location.search);
 const FAST = params.has('fast');
@@ -40,6 +40,9 @@ initAudio();
 
 const scene = createScene(document.getElementById('scene'), {
   onChipClick: (i) => { if (mode === 'solo') selectChip(i); },
+  // PC 조준 사격: 바라보는 대상이 바뀔 때 / 클릭했을 때
+  onAim: (id) => (mode === 'solo' ? soloAim(id) : versusUI.onAim(id)),
+  onFire: (id) => (mode === 'solo' ? dispatch({ type: 'shoot', target: id === 'self' ? 'self' : 'dealer' }) : versusUI.onFire(id)),
   onHover: (info, x, y) => showTip(info, x, y),
   onHurt: () => {
     hurtEl.classList.remove('on');
@@ -155,8 +158,31 @@ function record(events) {
   log = log.slice(-80);
 }
 
+// 혼자 하기 조준: 딜러를 바라보면 딜러, 아래를 내려다보면 나
+let soloAimId = null;
+function soloAimConf() {
+  if (!AIM_MODE() || mode !== 'solo' || state.phase !== 'player' || locked() || showManual) return null;
+  return { targets: [{ seat: 'dealer', id: 'dealer' }], self: 'self' };
+}
+function soloAim(id) {
+  soloAimId = id;
+  const el = document.getElementById('aimhint');
+  if (el) el.innerHTML = soloAimHint();
+  document.body.classList.toggle('aiming', id !== null);
+}
+function soloAimHint() {
+  if (!AIM_MODE() || state.phase !== 'player') return '';
+  const d = state.duel;
+  if (soloAimId === 'dealer') return `<span class="aimhint on">🎯 <b>딜러</b> 조준 · 클릭하면 쏜다 (실탄이면 <b>+${soloPreview}점</b>)</span>`;
+  if (soloAimId === 'self') return `<span class="aimhint self">🎯 <b>나</b>를 조준 · 클릭하면 쏜다 (공포탄이면 배수 ×${d.heat + soloHeatGain})</span>`;
+  return '<span class="aimhint">🎯 딜러를 바라보고 클릭 · 아래를 내려다보면 나를 쏜다</span>';
+}
+let soloPreview = 0;
+let soloHeatGain = 1;
+
 function refresh() {
   scene.update(state, { selectedChips, betSlots: betSlots(state) });
+  scene.setAim(soloAimConf());
   render();
 }
 
@@ -182,6 +208,8 @@ function render() {
   const heatGain = 1 + (p.charms.includes('coldHands') ? 1 : 0) + (p.charms.includes('fearless') ? 2 : 0)
     + picked.filter((c) => c.type === 'blue').length;
   const met = d.score >= d.quota;
+  soloPreview = pv.points;
+  soloHeatGain = heatGain;
   const playing = state.phase === 'player' || state.phase === 'dealer';
   const hint = (() => {
     if (state.phase === 'dealer') return '<span class="wait">딜러가 총을 집어 든다…</span>';
@@ -243,10 +271,10 @@ function render() {
         }).join('')}
       </div>
     </div>
-    <div class="actions">
+    ${AIM_MODE() ? `<p class="hint" id="aimhint">${soloAimHint()}</p>${state.phase === 'player' && !busy ? '<div class="crosshair"></div>' : ''}` : `<div class="actions">
       <button class="shoot dealer-btn" data-act="shoot" data-target="dealer" ${busy ? 'disabled' : ''}>딜러를 쏜다<small>실탄이면 <b>+${pv.points}점</b> · 차례 넘어감</small></button>
       <button class="shoot self-btn" data-act="shoot" data-target="self" ${busy ? 'disabled' : ''}>나를 쏜다<small>공포탄이면 <b>배수 ×${d.heat + heatGain}</b> · 실탄이면 체력 -1</small></button>
-    </div>
+    </div>`}
     ${met && state.phase === 'player' ? `<button class="cashout" data-act="cashOut" ${locked() ? 'disabled' : ''}>💰 정산하고 일어서기 <small>지금 ${d.score.toLocaleString()}점 · 할당량의 ×${(d.score / d.quota).toFixed(1)}</small></button>` : ''}
     ${toast ? `<p class="toast">${toast}</p>` : ''}
     <div class="meta">
@@ -312,7 +340,7 @@ app.addEventListener('click', (ev) => {
     manualSeen = true;
     try { localStorage.setItem('lc-manual-seen', '1'); } catch { /* 저장소 없음 */ }
     sfx.click();
-    return render();
+    return refresh();
   }
   if (type === 'removeChip') return dispatch({ type, chipType: chip });
   if ((type === 'shoot' || type === 'useItem') && locked()) return;

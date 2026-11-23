@@ -1,6 +1,6 @@
 // 사운드: 엔진 이벤트 → 효과음. 3D 연출 타이밍(scene3d.play)과 맞춰 지연을 준다.
 // 효과음은 plinkfx(CC0, 코드로 합성)를 쓴다 → src/vendor/plinkfx
-import { play, volume, muted, unlockAudio } from '../vendor/plinkfx/index.js?v=mwsw8wdn';
+import { play, volume, muted, unlockAudio } from '../vendor/plinkfx/index.js?v=mwswysnb';
 
 const FIRE_AT = 0.65;   // 총을 들고 발사하기까지 (scene3d animShot과 같은 값)
 const SHOT_LEN = 1.55;  // 사격 연출 전체 길이

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { newVersus, actVersus, viewFor, VS } from '../src/core/versus.js';
-import { createOnlineMatch } from '../src/core/online.js';
+import { newVersus, actVersus, viewFor, forfeit, VS } from '../src/core/versus.js';
+import { createOnlineHost, createOnlineGuest } from '../src/core/online.js';
 
 function rig(shells, turn = 0) {
   const { state } = newVersus(7);
@@ -87,53 +87,135 @@ test('결투: 무작위 2000판 — 모두 끝나고 불변식 유지', () => {
   }
 });
 
-// ── 온라인 동기화: 가짜 room으로 방장/참가자 두 화면을 흉내 ──
-function fakeRoomPair() {
-  const pres = [{}, {}];
-  const handlers = [[], []];
-  const peersFor = (me) => [0, 1].map((i) => ({ peer: `p${i}`, isMe: i === me, presence: pres[i] }));
-  const deliver = () => {
-    for (const i of [0, 1]) for (const h of handlers[i]) h({ peers: peersFor(i) });
-  };
-  const make = (i) => ({
-    presence(patch) { pres[i] = JSON.parse(JSON.stringify({ ...pres[i], ...patch })); queueMicrotask(deliver); return Promise.resolve(); },
-    onPeers(h) { handlers[i].push(h); queueMicrotask(() => h({ peers: peersFor(i) })); return () => {}; },
-    peers: () => peersFor(i),
-  });
-  return [make(0), make(1)];
-}
-const tick = () => new Promise((r) => setTimeout(r, 0));
-
-test('온라인: 방장과 참가자가 번갈아 쏘고 화면이 맞는다', async () => {
-  const [ra, rb] = fakeRoomPair();
-  let hostView, guestView;
-  const guestEvents = [];
-  const host = createOnlineMatch({ room: ra, role: 'host', seed: 42, onUpdate: (v) => { hostView = v; } });
-  const guest = createOnlineMatch({ room: rb, role: 'guest', onUpdate: (v, ev) => { guestView = v; guestEvents.push(...ev); } });
-  await tick(); await tick();
-  assert.ok(host.opponentHere && guest.opponentHere);
-  assert.ok(guestView, '참가자가 화면을 받음');
-  assert.equal(guestView.shells, undefined, '참가자에게 탄 순서는 가지 않는다');
-
-  // 몇 차례 진행: 차례인 쪽이 상대를 쏜다
-  for (let i = 0; i < 12 && hostView.phase === 'play'; i++) {
-    if (hostView.turn === 0) host.act({ type: 'shoot', target: 'opponent' });
-    else guest.act({ type: 'shoot', target: 'opponent' });
-    await tick(); await tick(); await tick();
-    assert.equal(guestView.turn, hostView.turn, `차례 일치 (${i})`);
-    assert.deepEqual(guestView.hp, hostView.hp, `체력 일치 (${i})`);
-    assert.equal(guest.pending, false);
-  }
-  assert.ok(guestEvents.some((e) => e.type === 'shot'));
+// ── 3~4인 ──
+test('4인: 차례가 살아 있는 다음 사람에게 돌고, 쓰러진 사람은 건너뛴다', () => {
+  const { state: s } = newVersus(3, 4);
+  assert.equal(s.players, 4);
+  s.shells = [true, false, false, false, false];
+  s.turn = 0;
+  s.hp[2] = 1;
+  actVersus(s, 0, { type: 'shoot', target: 2 }); // 2 탈락
+  assert.equal(s.hp[2], 0);
+  assert.equal(s.turn, 1);
+  actVersus(s, 1, { type: 'shoot', target: 3 }); // 공포탄 → 차례 넘어감 (2는 건너뜀)
+  assert.equal(s.turn, 3);
+  assert.equal(actVersus(s, 3, { type: 'shoot', target: 2 })[0].type, 'invalid'); // 쓰러진 사람은 못 쏜다
 });
 
-test('온라인: 참가자는 자기 차례가 아니면 행동을 보내지 않는다', async () => {
-  const [ra, rb] = fakeRoomPair();
+test('3인: 마지막 한 명이 남으면 그 판 승리', () => {
+  const { state: s } = newVersus(4, 3);
+  s.shells = [true, true, false];
+  s.turn = 0;
+  s.hp = [4, 1, 1];
+  actVersus(s, 0, { type: 'shoot', target: 1 });
+  assert.equal(s.phase, 'play');
+  s.turn = 0;
+  const ev = actVersus(s, 0, { type: 'shoot', target: 2 });
+  assert.ok(ev.some((e) => e.type === 'roundWin' && e.player === 0));
+});
+
+test('나간 사람은 탈락 처리, 차례였으면 다음 사람에게', () => {
+  const { state: s } = newVersus(5, 3);
+  s.turn = 1;
+  forfeit(s, 1);
+  assert.equal(s.hp[1], 0);
+  assert.equal(s.turn, 2);
+  const ev = forfeit(s, 2);
+  assert.ok(ev.some((e) => e.type === 'roundWin' && e.player === 0));
+});
+
+test('무작위 4인 1000판 — 모두 끝나고 불변식 유지', () => {
+  for (let seed = 1; seed <= 1000; seed++) {
+    const n = 2 + (seed % 3);
+    const { state: s } = newVersus(seed, n);
+    let steps = 0;
+    while (s.phase !== 'over') {
+      if (s.phase === 'roundOver') { actVersus(s, 0, { type: 'nextRound' }); continue; }
+      const p = s.turn;
+      const targets = s.hp.map((h, i) => (h > 0 && i !== p ? i : -1)).filter((i) => i >= 0);
+      const r = (seed * 31 + steps * 17) % 10;
+      const action = r < 2 && s.items[p].length ? { type: 'useItem', index: 0 } : { type: 'shoot', target: r < 6 ? targets[r % targets.length] : 'self' };
+      actVersus(s, p, action);
+      assert.ok(s.hp[s.turn] > 0 || s.phase !== 'play', '쓰러진 사람 차례');
+      assert.ok(++steps < 5000);
+    }
+  }
+});
+
+// ── 온라인 동기화: 가짜 연결로 방장 1 + 참가자 3 ──
+function fakeNet() {
+  const hostH = { join: [], leave: [], msg: [] };
+  const guests = {};
+  const hub = {
+    onJoin: (f) => hostH.join.push(f),
+    onLeave: (f) => hostH.leave.push(f),
+    onMessage: (f) => hostH.msg.push(f),
+    send: (id, m) => queueMicrotask(() => guests[id]?.h.forEach((f) => f(JSON.parse(JSON.stringify(m))))),
+  };
+  const connect = (id) => {
+    guests[id] = { h: [] };
+    const link = { onMessage: (f) => guests[id].h.push(f), send: (m) => queueMicrotask(() => hostH.msg.forEach((f) => f(id, JSON.parse(JSON.stringify(m))))) };
+    queueMicrotask(() => hostH.join.forEach((f) => f(id)));
+    return link;
+  };
+  const leave = (id) => { delete guests[id]; hostH.leave.forEach((f) => f(id)); };
+  return { hub, connect, leave };
+}
+const tick = async (n = 4) => { for (let i = 0; i < n; i++) await new Promise((r) => setTimeout(r, 0)); };
+
+test('온라인 4인: 대기실 → 시작 → 차례대로 쏘고 모두 화면이 맞는다', async () => {
+  const net = fakeNet();
+  let hostView, hostLobby;
+  const host = createOnlineHost({ hub: net.hub, seed: 42, onLobby: (l) => { hostLobby = l; }, onUpdate: (v) => { hostView = v; } });
+  const g = [1, 2, 3].map((k) => {
+    const o = { view: null, lobby: null };
+    o.c = createOnlineGuest({ link: net.connect('g' + k), onLobby: (l) => { o.lobby = l; }, onUpdate: (v) => { o.view = v; } });
+    return o;
+  });
+  await tick();
+  assert.equal(hostLobby.players, 4);
+  assert.deepEqual(g.map((x) => x.lobby.me), [1, 2, 3]);
+  assert.ok(host.start());
+  await tick();
+  assert.ok(g.every((x) => x.view && x.view.players === 4));
+  assert.equal(g[0].view.shells, undefined, '참가자에게 탄 순서는 가지 않는다');
+  for (let i = 0; i < 30 && hostView.phase === 'play'; i++) {
+    const t = hostView.turn;
+    const target = hostView.hp.findIndex((h, k) => h > 0 && k !== t);
+    if (t === 0) host.act({ type: 'shoot', target });
+    else g[t - 1].c.act({ type: 'shoot', target });
+    await tick();
+    for (const x of g) {
+      assert.equal(x.view.turn, hostView.turn, `차례 일치 (${i})`);
+      assert.deepEqual(x.view.hp, hostView.hp, `체력 일치 (${i})`);
+    }
+  }
+});
+
+test('온라인: 5번째 사람은 거절, 게임 중 나가면 탈락 처리', async () => {
+  const net = fakeNet();
   let hostView;
-  createOnlineMatch({ room: ra, role: 'host', seed: 5, onUpdate: (v) => { hostView = v; } });
-  const guest = createOnlineMatch({ room: rb, role: 'guest' });
-  await tick(); await tick();
+  const host = createOnlineHost({ hub: net.hub, seed: 9, onUpdate: (v) => { hostView = v; } });
+  for (const k of [1, 2, 3]) createOnlineGuest({ link: net.connect('g' + k) });
+  let refused = null;
+  createOnlineGuest({ link: net.connect('g4'), onRefused: (r) => { refused = r; } });
+  await tick();
+  assert.ok(refused);
+  host.start();
+  await tick();
+  net.leave('g2');
+  await tick();
+  assert.equal(hostView.hp[2], 0);
+});
+
+test('온라인: 참가자는 자기 차례가 아니면 보내지 않는다', async () => {
+  const net = fakeNet();
+  let hostView;
+  const host = createOnlineHost({ hub: net.hub, seed: 5, onUpdate: (v) => { hostView = v; } });
+  const guest = createOnlineGuest({ link: net.connect('g1') });
+  await tick();
+  host.start();
+  await tick();
   assert.equal(hostView.turn, 0);
-  const r = guest.act({ type: 'shoot', target: 'opponent' });
-  assert.equal(r[0].type, 'invalid');
+  assert.equal(guest.act({ type: 'shoot', target: 0 })[0].type, 'invalid');
 });

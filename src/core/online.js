@@ -1,89 +1,101 @@
-// 온라인 결투 동기화: claude.ai 아티팩트의 room(presence)만으로 동작한다. 서버 없음.
-// - 방장(host, 플레이어 0)이 게임을 진행하고, 상대에게 보여줄 화면(viewFor)과 이벤트를 presence에 싣는다.
-// - 참가자(guest, 플레이어 1)는 자기 행동만 presence에 싣는다 ({n, action}: n이 오르면 새 행동).
-// - presence는 '마지막 값'만 전달되므로, 참가자는 방장의 새 화면을 받기 전엔 다음 행동을 보내지 않는다.
-// room 인터페이스: presence(patch), onPeers(handler) → unsubscribe, peers()
-import { newVersus, actVersus, viewFor, eventsFor } from './versus.js?v=mwsw8wdn';
+// 온라인 결투 동기화 (2~4명). 연결 방식과 무관한 순수 로직.
+// - 방장(host, 자리 0)이 게임을 진행한다. 참가자는 들어온 순서대로 자리 1, 2, 3.
+// - 방장은 참가자마다 그 사람에게 보여줄 화면(viewFor: 탄 순서 없음, 자기 돋보기 결과만)을 따로 보낸다.
+// - 참가자는 자기 행동만 보낸다. 판정은 항상 방장.
+//
+// hub(방장 쪽 연결): onJoin(fn(id)), onLeave(fn(id)), onMessage(fn(id, msg)), send(id, msg)
+// link(참가자 쪽 연결): onMessage(fn(msg)), send(msg)
+import { newVersus, actVersus, viewFor, eventsFor, forfeit, VS } from './versus.js?v=mwswysnb';
 
-export function createOnlineMatch({ room, role, seed, onUpdate, onStatus }) {
-  const me = role === 'host' ? 0 : 1;
-  let state = null;          // 방장만 진짜 상태를 가진다
-  let view = null;           // 내 화면
-  let evSeq = 0;             // 방장이 보낸 이벤트 묶음 번호
-  let lastEvSeen = 0;        // 참가자가 처리한 이벤트 묶음 번호
-  let actN = 0;              // 참가자가 보낸 행동 번호
-  let lastActDone = 0;       // 방장이 처리한 참가자 행동 번호
-  let opponentHere = false;
-  let pending = false;       // 참가자: 행동을 보내고 응답 대기 중
+export function createOnlineHost({ hub, seed, onLobby, onUpdate }) {
+  const seats = ['host'];       // seats[i] = 연결 id (0은 방장)
+  let state = null;
+  let view = null;
 
-  const publishHost = (events) => {
-    evSeq += 1;
-    room.presence({
-      lc: { role: 'host', ev: evSeq, done: lastActDone, view: viewFor(state, 1), events: eventsFor(events, 1) },
+  const lobbyInfo = () => ({ players: seats.length, max: VS.maxPlayers, started: !!state });
+  const sendLobby = () => {
+    seats.forEach((id, i) => { if (i > 0) hub.send(id, { t: 'lobby', ...lobbyInfo(), me: i }); });
+    onLobby?.({ ...lobbyInfo(), me: 0 });
+  };
+  const broadcast = (events) => {
+    seats.forEach((id, i) => {
+      if (i > 0 && id) hub.send(id, { t: 'state', me: i, view: viewFor(state, i), events: eventsFor(events, i) });
     });
+    view = viewFor(state, 0);
+    onUpdate?.(view, eventsFor(events, 0));
   };
 
-  if (role === 'host') {
-    const r = newVersus(seed);
-    state = r.state;
-    view = viewFor(state, 0);
-    publishHost(r.events);
-    onUpdate?.(view, r.events);
-  } else {
-    room.presence({ lc: { role: 'guest', act: null } });
-  }
-
-  const unsub = room.onPeers(({ peers }) => {
-    const others = peers.filter((p) => !p.isMe && p.presence?.lc);
-    const opp = others.find((p) => p.presence.lc.role === (role === 'host' ? 'guest' : 'host'));
-    const here = !!opp;
-    if (here !== opponentHere) {
-      opponentHere = here;
-      onStatus?.({ opponentHere: here });
-      // 방장은 새로 들어온 상대에게 현재 화면을 다시 보낸다
-      if (here && role === 'host') publishHost([]);
-    }
-    if (!opp) return;
-    const lc = opp.presence.lc;
-
-    if (role === 'host') {
-      const act = lc.act;
-      if (act && typeof act.n === 'number' && act.n > lastActDone) {
-        lastActDone = act.n;
-        const events = actVersus(state, 1, act.action);
-        view = viewFor(state, 0);
-        publishHost(events);
-        onUpdate?.(view, events);
-      }
-    } else if (typeof lc.ev === 'number' && lc.ev > lastEvSeen && lc.view) {
-      lastEvSeen = lc.ev;
-      if (typeof lc.done === 'number' && lc.done >= actN) pending = false;
-      view = lc.view;
-      onUpdate?.(view, Array.isArray(lc.events) ? lc.events : []);
-    }
+  hub.onJoin((id) => {
+    if (state || seats.length >= VS.maxPlayers) { hub.send(id, { t: 'full', reason: state ? '이미 시작한 방이다' : '방이 가득 찼다' }); return; }
+    seats.push(id);
+    sendLobby();
+  });
+  hub.onLeave((id) => {
+    const i = seats.indexOf(id);
+    if (i <= 0) return;
+    if (!state) { seats.splice(i, 1); sendLobby(); return; }
+    seats[i] = null; // 게임 중이면 자리는 남기고 탈락 처리
+    const events = forfeit(state, i);
+    broadcast(events);
+  });
+  hub.onMessage((id, msg) => {
+    const i = seats.indexOf(id);
+    if (i <= 0 || !state || msg?.t !== 'act') return;
+    const events = actVersus(state, i, msg.action);
+    if (events.some((e) => e.type === 'invalid')) { hub.send(id, { t: 'state', me: i, view: viewFor(state, i), events }); return; }
+    broadcast(events);
   });
 
+  sendLobby();
   return {
-    me,
+    me: 0,
     get view() { return view; },
-    get opponentHere() { return opponentHere; },
+    get players() { return seats.length; },
+    get started() { return !!state; },
+    start() {
+      if (state || seats.length < VS.minPlayers) return false;
+      const r = newVersus(seed, seats.length);
+      state = r.state;
+      broadcast(r.events);
+      return true;
+    },
+    act(action) {
+      if (!state) return [{ type: 'invalid', reason: '아직 시작하지 않았다' }];
+      const events = actVersus(state, 0, action);
+      if (events.some((e) => e.type === 'invalid')) return events;
+      broadcast(events);
+      return events;
+    },
+  };
+}
+
+export function createOnlineGuest({ link, onLobby, onUpdate, onRefused }) {
+  let view = null;
+  let me = null;
+  let pending = false;
+  link.onMessage((msg) => {
+    if (!msg || typeof msg !== 'object') return;
+    if (msg.t === 'lobby') { me = msg.me; onLobby?.(msg); }
+    else if (msg.t === 'full') onRefused?.(msg.reason || '들어갈 수 없는 방이다');
+    else if (msg.t === 'state' && msg.view) {
+      me = msg.me;
+      view = msg.view;
+      pending = false;
+      onUpdate?.(view, Array.isArray(msg.events) ? msg.events : []);
+    }
+  });
+  return {
+    get me() { return me; },
+    get view() { return view; },
     get pending() { return pending; },
     act(action) {
-      if (role === 'host') {
-        const events = actVersus(state, 0, action);
-        view = viewFor(state, 0);
-        publishHost(events);
-        onUpdate?.(view, events);
-        return events;
-      }
-      if (pending) return [{ type: 'invalid', reason: '상대 응답을 기다리는 중' }];
-      // 참가자 쪽 간단한 사전 확인 (최종 판정은 방장)
-      if (action.type !== 'nextRound' && view && view.turn !== me) return [{ type: 'invalid', reason: '상대 차례다' }];
-      actN += 1;
+      if (pending) return [{ type: 'invalid', reason: '방장 응답을 기다리는 중' }];
+      if (!view) return [{ type: 'invalid', reason: '아직 시작하지 않았다' }];
+      if (action.type !== 'nextRound' && view.turn !== me) return [{ type: 'invalid', reason: '내 차례가 아니다' }];
+      if (action.type === 'nextRound') return [{ type: 'invalid', reason: '방장이 다음 판을 시작한다' }];
       pending = true;
-      room.presence({ lc: { role: 'guest', act: { n: actN, action } } });
+      link.send({ t: 'act', action });
       return [];
     },
-    stop() { unsub?.(); },
   };
 }

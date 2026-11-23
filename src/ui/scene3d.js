@@ -1,18 +1,30 @@
 // 3D 테이블 씬 (Three.js). 게임 규칙은 모르고, 상태를 그리고 이벤트를 연출만 한다.
 // 레트로 로우폴리 스타일: 저해상도 렌더 → 픽셀 확대, 플랫 셰이딩, 안개, 흔들리는 전등.
 import * as THREE from 'three';
-import { CHIPS } from '../core/chips.js?v=mwsw8wdn';
-import { CHARMS } from '../core/charms.js?v=mwsw8wdn';
-import { CONFIG } from '../core/config.js?v=mwsw8wdn';
+import { CHIPS } from '../core/chips.js?v=mwswysnb';
+import { CHARMS } from '../core/charms.js?v=mwswysnb';
+import { CONFIG } from '../core/config.js?v=mwswysnb';
 
 const PIXEL_SCALE = 3; // 클수록 더 도트처럼 보인다
+// 좌석: player(앞, 카메라) · dealer(맞은편) · left · right
 const HOLD = {
   player: new THREE.Vector3(0.32, 1.3, 1.1),
   dealer: new THREE.Vector3(-0.25, 1.28, -1.05),
+  left: new THREE.Vector3(-1.0, 1.28, 0.15),
+  right: new THREE.Vector3(1.0, 1.28, -0.45),
 };
 const AIM = {
   dealer: new THREE.Vector3(0, 1.95, -1.55),   // 딜러 머리
   player: new THREE.Vector3(0, 1.75, 2.3),     // 카메라(나)
+  left: new THREE.Vector3(-1.75, 1.95, -0.2),
+  right: new THREE.Vector3(1.75, 1.95, -0.2),
+};
+// 자기 자신을 쏠 때 총을 드는 위치
+const SELF_FROM = {
+  player: new THREE.Vector3(0.0, 1.45, 1.05),
+  dealer: new THREE.Vector3(0.75, 1.95, -1.45),
+  left: new THREE.Vector3(-1.65, 1.95, 0.55),
+  right: new THREE.Vector3(1.65, 1.95, 0.15),
 };
 const REST_POS = new THREE.Vector3(0.1, 0.99, -0.3);
 const REST_LOOK = new THREE.Vector3(1.5, 0.99, -0.45);
@@ -20,6 +32,8 @@ const REST_LOOK = new THREE.Vector3(1.5, 0.99, -0.45);
 // 카메라 위치: 테이블에 앉음 / 일어나서 왼쪽 벽 전화 / 오른쪽 상점 진열장 / 사망
 const POSES = {
   table: { pos: new THREE.Vector3(0, 1.78, 2.2), look: new THREE.Vector3(0, 1.16, -1.2) },
+  // 세로 화면 + 옆자리 상대가 있을 때: 뒤로 물러나 높이서 내려다본다 (모든 자리가 보이게)
+  tableWide: { pos: new THREE.Vector3(0, 2.75, 3.6), look: new THREE.Vector3(0, 1.05, -0.5) },
   phone: { pos: new THREE.Vector3(-1.2, 1.85, 1.9), look: new THREE.Vector3(-3.3, 1.25, 0.7) },
   shop:  { pos: new THREE.Vector3(0.9, 1.85, 1.9), look: new THREE.Vector3(3.1, 1.3, 1.25) },
   dead:  { pos: new THREE.Vector3(0.5, 1.05, 2.0), look: new THREE.Vector3(-0.4, 1.6, 0.3) },
@@ -29,7 +43,7 @@ const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, flatS
 const easeOut = (k) => 1 - (1 - k) ** 3;
 const easeInOut = (k) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2);
 
-export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
+export function createScene(canvas, { onChipClick, onHurt, onHover, onAim, onFire } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'low-power' });
   renderer.setPixelRatio(1);
   renderer.shadowMap.enabled = true;
@@ -191,6 +205,52 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
   scene.add(dealer);
   const headMat = boneMat;
   const twitch = { t: 0, z: 0, y: 0 };
+
+  // ── 옆자리 상대 (3~4인 결투용): 딜러를 단순화한 인물, 좌석마다 옷 색이 다르다 ──
+  function makeFigure(coatColor, eyeColor) {
+    const g = new THREE.Group();
+    const cm = mat(coatColor);
+    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.28, 0.5, 1.15, 6), cm);
+    body.position.y = 1.12;
+    const sh = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.15, 0.34), cm);
+    sh.position.y = 1.66;
+    const hd = new THREE.Group();
+    hd.position.y = 1.98;
+    const bm = mat(0xb2ab96, { emissive: 0x000000 });
+    const sk = new THREE.Mesh(new THREE.IcosahedronGeometry(0.23, 1), bm);
+    sk.scale.set(0.88, 1.32, 0.95);
+    const em = new THREE.MeshBasicMaterial({ color: eyeColor });
+    const eyesF = [-0.08, 0.08].map((x) => {
+      const so = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 4), voidMat);
+      so.position.set(x, 0.05, 0.17);
+      so.scale.set(1, 1.2, 0.55);
+      const pu = new THREE.Mesh(new THREE.SphereGeometry(0.016, 5, 4), em);
+      pu.position.set(x, 0.045, 0.205);
+      hd.add(so, pu);
+      return pu;
+    });
+    const mo = new THREE.Mesh(new THREE.BoxGeometry(0.24, 0.05, 0.03), voidMat);
+    mo.position.set(0, -0.18, 0.18);
+    const hood2 = new THREE.Mesh(new THREE.SphereGeometry(0.33, 7, 6, Math.PI * 0.85, Math.PI * 1.3, 0, Math.PI * 0.62), cm);
+    hood2.scale.set(1, 1.35, 1.05);
+    hood2.position.set(0, 0.05, -0.05);
+    hd.add(sk, mo, hood2);
+    g.add(body, sh, hd);
+    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+    g.visible = false;
+    scene.add(g);
+    return { group: g, head: hd, boneMat: bm, eyeMat: em, eyes: eyesF, jolt: 0, slump: 0, alive: true, aimed: 0 };
+  }
+  const sideFigures = {
+    left: makeFigure(0x1a2a1a, 0x7dff6a),
+    right: makeFigure(0x2a1a2e, 0x6ab8ff),
+  };
+  sideFigures.left.group.position.set(-1.75, 0, -0.2);
+  sideFigures.left.group.rotation.y = Math.PI / 2;
+  sideFigures.right.group.position.set(1.75, 0, -0.2);
+  sideFigures.right.group.rotation.y = -Math.PI / 2;
+  // 맞은편 딜러도 같은 방식으로 조준/탈락 표시를 하기 위한 상태
+  const dealerFx = { alive: true, aimed: 0, slump: 0 };
 
   // ── 벽 모니터 (점수판) ──
   const monCanvas = document.createElement('canvas');
@@ -526,14 +586,9 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
   let hurtGlow = 0;
 
   function animShot(t, e) {
-    const holdPos = HOLD[e.shooter];
-    const aimAt = e.target === e.shooter
-      ? (e.shooter === 'player' ? AIM.player : AIM.dealer)
-      : AIM[e.target];
+    const aimAt = AIM[e.target] ?? AIM.dealer;
     // 자기 자신을 쏠 때는 총을 머리 옆으로 가져간다
-    const from = e.target === e.shooter
-      ? (e.shooter === 'player' ? new THREE.Vector3(0.0, 1.45, 1.05) : new THREE.Vector3(0.75, 1.95, -1.45))
-      : holdPos;
+    const from = e.target === e.shooter ? (SELF_FROM[e.shooter] ?? SELF_FROM.dealer) : (HOLD[e.shooter] ?? HOLD.dealer);
     const q = aimQuat(from, aimAt);
     const p0 = new THREE.Vector3(), q0 = new THREE.Quaternion();
     tween(t, 1, () => { p0.copy(gun.position); q0.copy(gun.quaternion); });
@@ -590,6 +645,9 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
         t = lastShot.end;
       } else if (e.type === 'damage' && e.who === 'dealer') {
         animDealerHit(lastShot ? lastShot.fireAt : t);
+      } else if (e.type === 'damage' && sideFigures[e.who]) {
+        const f = sideFigures[e.who];
+        tween(lastShot ? lastShot.fireAt : t, 600, (k) => { f.jolt = Math.sin(k * Math.PI); f.boneMat.emissive.setRGB(0.8 * (1 - k), 0, 0); });
       } else if (e.type === 'reload') {
         animReload(t);
         t += 450;
@@ -625,7 +683,20 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
     });
   }
 
-  function update(state, { selectedChips = [], betSlots = 3 } = {}) {
+  // seats: { dealer: {visible, alive}, left: {...}, right: {...} } (생략하면 혼자 하기: 딜러만)
+  function setSeats(seats) {
+    const d = seats?.dealer ?? { visible: true, alive: true };
+    dealer.visible = d.visible !== false;
+    dealerFx.alive = d.alive !== false;
+    for (const k of ['left', 'right']) {
+      const conf = seats?.[k];
+      sideFigures[k].group.visible = !!conf?.visible;
+      sideFigures[k].alive = conf?.alive !== false;
+    }
+  }
+
+  function update(state, { selectedChips = [], betSlots = 3, seats = null } = {}) {
+    setSeats(seats);
     rebuildShells(state.duel);
     rebuildChips(state.player.pouch, selectedChips, betSlots);
     drawMonitor(state);
@@ -633,7 +704,8 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
     rebuildCharms(state.player.charms);
     const want = state.phase === 'call' ? 'phone'
       : state.phase === 'shop' ? 'shop'
-      : state.phase === 'gameOver' && state.result?.reason === 'dead' ? 'dead' : 'table';
+      : state.phase === 'gameOver' && state.result?.reason === 'dead' ? 'dead'
+      : (seats?.left?.visible || seats?.right?.visible) && canvas.clientWidth / canvas.clientHeight < 1 ? 'tableWide' : 'table';
     // 클리어 연출을 먼저 보여주고 일어난다 / 사망은 잠깐 뒤에 쓰러진다
     if (want !== pose) moveCamera(want, want === 'phone' ? 1900 : want === 'dead' ? 900 : 0);
     if (state.phase === 'call' && !ringing) tween(1900, 1, () => { ringing = state.phase === 'call'; });
@@ -650,6 +722,7 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
     raycaster.setFromCamera(pointer, camera);
     const hit = raycaster.intersectObjects(chipMeshes)[0];
     if (hit) onChipClick?.(hit.object.userData.index);
+    else if (aim && aimTarget !== null && pose.startsWith('table') && ev.button === 0) onFire?.(aimTarget);
     else {
       const ch = raycaster.intersectObjects(charmMeshes)[0];
       if (ch) onHover?.(ch.object.userData, ev.clientX, ev.clientY);
@@ -672,6 +745,34 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
       onHover?.(info, ev.clientX, ev.clientY);
     }
   });
+
+  // ── 조준 (PC): 마우스로 고개를 돌려 바라보는 사람을 쏜다 ──
+  // setAim({ targets: [{ seat, id }], self: id }) — id는 호출하는 쪽 값(플레이어 번호 등). null이면 끈다.
+  let aim = null;
+  let aimTarget = null;
+  const aimDir = new THREE.Vector3();
+  const toHead = new THREE.Vector3();
+  function setAim(conf) {
+    aim = conf;
+    if (!conf && aimTarget !== null) { aimTarget = null; onAim?.(null); }
+  }
+  function updateAim() {
+    if (!aim || !pose.startsWith('table')) return;
+    let best = null, bestAng = 0.38;
+    for (const t of aim.targets) {
+      toHead.copy(AIM[t.seat]).sub(camera.position).normalize();
+      const ang = aimDir.angleTo(toHead);
+      if (ang < bestAng) { bestAng = ang; best = t.id; }
+    }
+    // 아래(내 쪽 테이블 끝)를 내려다보면 나 자신
+    if (best === null && aim.self !== undefined && look.y > 0.72) best = aim.self;
+    if (best !== aimTarget) { aimTarget = best; onAim?.(best); }
+    // 조준된 인물: 눈이 밝아진다
+    const seatOf = (id) => aim.targets.find((t) => t.id === id)?.seat;
+    const s = seatOf(aimTarget);
+    dealerFx.aimed += ((s === 'dealer' ? 1 : 0) - dealerFx.aimed) * 0.2;
+    for (const k of ['left', 'right']) sideFigures[k].aimed += ((s === k ? 1 : 0) - sideFigures[k].aimed) * 0.2;
+  }
 
   // ── 크기 / 루프 ──
   function resize() {
@@ -706,13 +807,35 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
     const tt = now / 1000;
     shake *= 0.9;
     hurtGlow *= 0.94;
-    const sway = pose === 'table' ? 1 : 0.3;
-    camera.position.set(
-      camPos.x + look.x * 0.12 * sway + (Math.random() - 0.5) * shake,
-      camPos.y + Math.sin(tt * 1.3) * 0.01 - look.y * 0.05 * sway + (Math.random() - 0.5) * shake,
-      camPos.z,
-    );
-    camera.lookAt(camLook.x + look.x * 0.3 * sway, camLook.y - look.y * 0.15 * sway, camLook.z);
+    const sway = pose.startsWith('table') ? 1 : 0.3;
+    if (aim && pose.startsWith('table')) {
+      // 조준 모드: 마우스 좌우로 크게 고개를 돌리고, 아래로 내리면 내 쪽을 본다
+      const yaw = look.x * 0.95;
+      const pitch = -0.18 - look.y * 0.5;
+      camera.position.set(camPos.x + (Math.random() - 0.5) * shake, camPos.y + Math.sin(tt * 1.3) * 0.01 + (Math.random() - 0.5) * shake, camPos.z);
+      aimDir.set(Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch));
+      camera.lookAt(camera.position.x + aimDir.x, camera.position.y + aimDir.y, camera.position.z + aimDir.z);
+      updateAim();
+    } else {
+      camera.position.set(
+        camPos.x + look.x * 0.12 * sway + (Math.random() - 0.5) * shake,
+        camPos.y + Math.sin(tt * 1.3) * 0.01 - look.y * 0.05 * sway + (Math.random() - 0.5) * shake,
+        camPos.z,
+      );
+      camera.lookAt(camLook.x + look.x * 0.3 * sway, camLook.y - look.y * 0.15 * sway, camLook.z);
+    }
+    // 옆자리 인물: 숨쉬기, 맞으면 움찔, 탈락하면 고개를 떨군다, 조준되면 눈이 커진다
+    for (const k of ['left', 'right']) {
+      const f = sideFigures[k];
+      if (!f.group.visible) continue;
+      f.slump += ((f.alive ? 0 : 1) - f.slump) * 0.05;
+      f.head.position.y = 1.98 + Math.sin(tt * 1.2 + (k === 'left' ? 1 : 2)) * 0.012 - f.slump * 0.25;
+      f.head.rotation.x = -f.jolt * 0.5 + f.slump * 0.9;
+      f.group.children[0].rotation.x = f.slump * 0.3;
+      f.jolt *= 0.9;
+      for (const e of f.eyes) e.scale.setScalar(f.alive ? 1 + f.aimed * 1.6 : 0.01);
+    }
+    dealerFx.slump += ((dealerFx.alive ? 0 : 1) - dealerFx.slump) * 0.05;
     // 전화벨: 수화기가 덜덜 떨리고 빨간 불이 깜빡인다
     if (ringing) {
       const on = Math.sin(tt * 30) > 0 && (tt % 1.2) < 0.8;
@@ -731,13 +854,13 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
     twitch.t *= 0.965;
     head.rotation.z += ((twitch.z * twitch.t) - head.rotation.z) * 0.35;
     head.rotation.y = Math.sin(tt * 0.6) * 0.12 + twitch.y * twitch.t;
-    head.position.y = 2.02 + Math.sin(tt * 1.1) * 0.012;
+    head.position.y = 2.02 + Math.sin(tt * 1.1) * 0.012 - dealerFx.slump * 0.3;
     const lean = dealerTurn ? 1 : 0;
     leanK += (lean - leanK) * 0.05;
     dealer.position.z = -1.55 + leanK * 0.22 + hitJolt.z;
-    head.rotation.x = leanK * 0.25 + hitJolt.x;
+    head.rotation.x = leanK * 0.25 + hitJolt.x + dealerFx.slump * 0.9;
     pupilMat.color.setRGB(1, 0.14 + Math.random() * 0.1 * leanK, 0.08);
-    const pupilScale = 1 + leanK * 0.6 + peekGlow * 2.5 + (Math.random() < 0.02 ? 1 : 0);
+    const pupilScale = dealerFx.alive ? 1 + leanK * 0.6 + peekGlow * 2.5 + dealerFx.aimed * 1.6 + (Math.random() < 0.02 ? 1 : 0) : 0.01;
     if (peekGlow > 0.01) pupilMat.color.setRGB(1, 0.35 * peekGlow, 0.1 * peekGlow);
     for (const pp of pupils) pp.scale.setScalar(pupilScale);
     renderer.render(scene, camera);
@@ -773,5 +896,5 @@ export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
     }
   }
 
-  return { update, play, resize, celebrate };
+  return { update, play, resize, celebrate, setAim };
 }
