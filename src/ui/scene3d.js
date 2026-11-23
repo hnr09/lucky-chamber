@@ -2,6 +2,7 @@
 // 레트로 로우폴리 스타일: 저해상도 렌더 → 픽셀 확대, 플랫 셰이딩, 안개, 흔들리는 전등.
 import * as THREE from 'three';
 import { CHIPS } from '../core/chips.js';
+import { CHARMS } from '../core/charms.js';
 import { CONFIG } from '../core/config.js';
 
 const PIXEL_SCALE = 3; // 클수록 더 도트처럼 보인다
@@ -13,14 +14,22 @@ const AIM = {
   dealer: new THREE.Vector3(0, 1.95, -1.55),   // 딜러 머리
   player: new THREE.Vector3(0, 1.75, 2.3),     // 카메라(나)
 };
-const REST_POS = new THREE.Vector3(0.1, 0.99, -0.15);
-const REST_LOOK = new THREE.Vector3(1.5, 0.99, -0.3);
+const REST_POS = new THREE.Vector3(0.1, 0.99, -0.3);
+const REST_LOOK = new THREE.Vector3(1.5, 0.99, -0.45);
+
+// 카메라 위치: 테이블에 앉음 / 일어나서 왼쪽 벽 전화 / 오른쪽 상점 진열장 / 사망
+const POSES = {
+  table: { pos: new THREE.Vector3(0, 1.78, 2.2), look: new THREE.Vector3(0, 1.16, -1.2) },
+  phone: { pos: new THREE.Vector3(-1.2, 1.85, 1.9), look: new THREE.Vector3(-3.3, 1.25, 0.7) },
+  shop:  { pos: new THREE.Vector3(0.9, 1.85, 1.9), look: new THREE.Vector3(3.1, 1.3, 1.25) },
+  dead:  { pos: new THREE.Vector3(0.5, 1.05, 2.0), look: new THREE.Vector3(-0.4, 1.6, 0.3) },
+};
 
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 0.85, metalness: 0.05, ...extra });
 const easeOut = (k) => 1 - (1 - k) ** 3;
 const easeInOut = (k) => (k < 0.5 ? 4 * k ** 3 : 1 - (-2 * k + 2) ** 3 / 2);
 
-export function createScene(canvas, { onChipClick, onHurt } = {}) {
+export function createScene(canvas, { onChipClick, onHurt, onHover } = {}) {
   const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'low-power' });
   renderer.setPixelRatio(1);
   renderer.shadowMap.enabled = true;
@@ -31,8 +40,9 @@ export function createScene(canvas, { onChipClick, onHurt } = {}) {
   scene.fog = new THREE.Fog(0x070506, 3.2, 10);
 
   const camera = new THREE.PerspectiveCamera(52, 1, 0.05, 40);
-  const camBase = new THREE.Vector3(0, 1.78, 2.2);
-  const lookBase = new THREE.Vector3(0, 1.16, -1.2);
+  const camPos = POSES.table.pos.clone();
+  const camLook = POSES.table.look.clone();
+  let pose = 'table';
 
   // ── 조명 ──
   scene.add(new THREE.AmbientLight(0x3a2c34, 1.1));
@@ -46,9 +56,13 @@ export function createScene(canvas, { onChipClick, onHurt } = {}) {
   rim.position.set(0, 2.2, -3.2);
   scene.add(rim);
   // 딜러 얼굴을 비추는 약한 보조광 (없으면 실루엣만 보인다)
-  const fill = new THREE.PointLight(0xffc89a, 2.2, 4, 1.4);
-  fill.position.set(0, 1.9, 0.2);
+  const fill = new THREE.PointLight(0xffd8b0, 1.6, 3.2, 1.4);
+  fill.position.set(0, 2.1, -0.3);
   scene.add(fill);
+  // 아래에서 비추는 붉은 빛: 얼굴에 그림자가 위로 진다
+  const under = new THREE.PointLight(0xff2a14, 0.9, 1.6, 1.8);
+  under.position.set(0, 1.2, -1.15);
+  scene.add(under);
   const flash = new THREE.PointLight(0xffa040, 0, 6, 1.5);
   scene.add(flash);
 
@@ -92,38 +106,91 @@ export function createScene(canvas, { onChipClick, onHurt } = {}) {
   bulb.position.set(0, 2.45, -0.2);
   scene.add(cord, shade, bulb);
 
-  // ── 딜러 ──
+  // ── 딜러: 길쭉한 해골 얼굴, 퀭한 눈구멍, 이빨, 긴 손가락, 누더기 두건 ──
   const dealer = new THREE.Group();
   dealer.position.set(0, 0, -1.55);
-  const coat = mat(0x16121b);
-  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.58, 1.15, 7), coat);
+  const coat = mat(0x0e0b10);
+  const torso = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.55, 1.25, 6), coat);
   torso.position.y = 1.15;
-  const shoulders = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.22, 0.45), coat);
-  shoulders.position.y = 1.66;
-  const headMat = mat(0xd8cdb2, { emissive: 0x000000 });
-  const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.27, 1), headMat);
-  head.position.y = 1.97;
-  head.scale.set(1, 1.15, 1);
-  const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff2a1a });
-  const eyes = [-0.09, 0.09].map((x) => {
-    const e = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 4), eyeMat);
-    e.position.set(x, 2.0, 0.24);
+  const shoulders = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.16, 0.36), coat);
+  shoulders.position.y = 1.7;
+  shoulders.rotation.z = 0.04;
+  const boneMat = mat(0xb9b29c, { emissive: 0x000000 });
+  const voidMat = new THREE.MeshBasicMaterial({ color: 0x020102 });
+  const toothMat = mat(0xe3d9b4);
+  const pupilMat = new THREE.MeshBasicMaterial({ color: 0xff2414 });
+
+  const head = new THREE.Group();
+  head.position.set(0, 2.02, 0.02);
+  const skull = new THREE.Mesh(new THREE.IcosahedronGeometry(0.25, 1), boneMat);
+  skull.scale.set(0.88, 1.38, 0.95);
+  const jaw = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.1, 0.17), boneMat);
+  jaw.position.set(0, -0.3, 0.05);
+  const cheeks = [-0.12, 0.12].map((x) => {
+    const c = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.08), boneMat);
+    c.position.set(x, -0.05, 0.17);
+    return c;
+  });
+  const sockets = [-0.085, 0.085].map((x) => {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.068, 7, 5), voidMat);
+    e.position.set(x, 0.06, 0.18);
+    e.scale.set(1, 1.2, 0.55);
     return e;
   });
-  const grin = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.025, 0.02), new THREE.MeshBasicMaterial({ color: 0x1a0a0a }));
-  grin.position.set(0, 1.86, 0.26);
-  const hat = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.22, 0.34, 8), mat(0x0c0a0e));
-  hat.position.y = 2.36;
-  const brim = new THREE.Mesh(new THREE.CylinderGeometry(0.38, 0.38, 0.03, 10), mat(0x0c0a0e));
-  brim.position.y = 2.2;
-  const hands = [-0.5, 0.5].map((x) => {
-    const h = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.08, 0.22), headMat);
-    h.position.set(x, 0.98, 0.55);
-    return h;
+  const pupils = [-0.085, 0.085].map((x) => {
+    const e = new THREE.Mesh(new THREE.SphereGeometry(0.016, 5, 4), pupilMat);
+    e.position.set(x, 0.05, 0.215);
+    return e;
   });
-  dealer.add(torso, shoulders, head, ...eyes, grin, hat, brim, ...hands);
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.03, 0.07, 3), voidMat);
+  nose.position.set(0, -0.07, 0.215);
+  nose.rotation.x = Math.PI;
+  const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.075, 0.03), voidMat);
+  mouth.position.set(0, -0.2, 0.19);
+  const teeth = [];
+  for (let i = 0; i < 9; i++) {
+    const x = -0.13 + i * 0.0325;
+    const curve = Math.abs(x) * 0.35;
+    for (const [y, h] of [[-0.175, 0.03], [-0.228, 0.026]]) {
+      const t = new THREE.Mesh(new THREE.BoxGeometry(0.024, h, 0.02), toothMat);
+      t.position.set(x, y + curve * (y > -0.2 ? 1 : -1) * 0.2, 0.2 - curve * 0.25);
+      teeth.push(t);
+    }
+  }
+  // 누더기 두건 (뒤쪽 반구 + 늘어진 천)
+  const hood = new THREE.Mesh(new THREE.SphereGeometry(0.36, 7, 6, Math.PI * 0.85, Math.PI * 1.3, 0, Math.PI * 0.62), coat);
+  hood.scale.set(1, 1.35, 1.05);
+  hood.position.set(0, 0.06, -0.05);
+  const drape = new THREE.Mesh(new THREE.ConeGeometry(0.45, 0.6, 6, 1, true), coat);
+  drape.position.set(0, -0.35, -0.08);
+  head.add(skull, jaw, ...cheeks, ...sockets, ...pupils, nose, mouth, ...teeth, hood, drape);
+
+  // 긴 팔과 테이블을 짚은 손가락
+  const arms = [];
+  for (const side of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.06, 0.95, 5), coat);
+    arm.position.set(side * 0.5, 1.33, 0.25);
+    arm.rotation.x = 0.95;
+    arm.rotation.z = side * -0.15;
+    const palm = new THREE.Mesh(new THREE.BoxGeometry(0.13, 0.04, 0.12), boneMat);
+    palm.position.set(side * 0.56, 0.975, 0.62);
+    arms.push(arm, palm);
+    for (let f = 0; f < 4; f++) {
+      const finger = new THREE.Group();
+      const seg = new THREE.Mesh(new THREE.BoxGeometry(0.018, 0.018, 0.2), boneMat);
+      seg.position.z = 0.1;
+      finger.add(seg);
+      finger.position.set(side * 0.56 + (f - 1.5) * 0.032, 0.98, 0.67);
+      finger.rotation.y = (f - 1.5) * 0.18 * side;
+      finger.rotation.x = 0.12;
+      arms.push(finger);
+    }
+  }
+  dealer.add(torso, shoulders, head, ...arms);
   dealer.traverse((o) => { if (o.isMesh) o.castShadow = true; });
   scene.add(dealer);
+  const headMat = boneMat;
+  const twitch = { t: 0, z: 0, y: 0 };
 
   // ── 벽 모니터 (점수판) ──
   const monCanvas = document.createElement('canvas');
@@ -144,6 +211,137 @@ export function createScene(canvas, { onChipClick, onHurt } = {}) {
   const monGlow = new THREE.PointLight(0x40ff90, 1.2, 3, 2);
   monGlow.position.set(1.3, 2.1, -2.8);
   scene.add(monGlow);
+
+  // ── 벽 전화기 (왼쪽 벽) ──
+  const phone = new THREE.Group();
+  const bakelite = mat(0x141010, { roughness: 0.35, metalness: 0.3 });
+  const phoneBody = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.42, 0.3), bakelite);
+  const dial = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.03, 12), mat(0xd8ccaa, { metalness: 0.2 }));
+  dial.rotation.z = Math.PI / 2;
+  dial.position.set(0.08, -0.04, 0);
+  const handset = new THREE.Group();
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.4, 0.07), bakelite);
+  const ear = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.09, 0.1), bakelite);
+  ear.position.y = 0.2;
+  const mouthPiece = ear.clone();
+  mouthPiece.position.y = -0.2;
+  handset.add(grip, ear, mouthPiece);
+  handset.position.set(0.12, 0.05, 0.14);
+  const bell = new THREE.Mesh(new THREE.SphereGeometry(0.025, 6, 4), new THREE.MeshBasicMaterial({ color: 0x330000 }));
+  bell.position.set(0.08, 0.16, 0);
+  // 위쪽 황동 종 두 개 + 나무 받침판
+  const brassBell = mat(0xc89a3c, { metalness: 0.8, roughness: 0.3 });
+  const bells = [-0.08, 0.08].map((z) => {
+    const b = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), brassBell);
+    b.rotation.z = -Math.PI / 2;
+    b.position.set(0.07, 0.26, z);
+    return b;
+  });
+  const board = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.75, 0.45), mat(0x3a2414));
+  board.position.set(-0.08, 0, 0);
+  const dialFace = new THREE.Mesh(new THREE.CircleGeometry(0.06, 10), new THREE.MeshBasicMaterial({ color: 0x1a1210 }));
+  dialFace.rotation.y = Math.PI / 2;
+  dialFace.position.set(0.097, -0.04, 0);
+  phone.add(board, phoneBody, dial, dialFace, handset, bell, ...bells);
+  phone.scale.setScalar(1.35);
+  phone.position.set(-3.32, 1.5, 0.75);
+  scene.add(phone);
+  // 전화기를 비추는 작은 벽등
+  const sconce = new THREE.PointLight(0xffc890, 1.4, 2.4, 1.6);
+  sconce.position.set(-3.0, 2.2, 0.75);
+  scene.add(sconce);
+  const phoneLight = new THREE.PointLight(0xffb070, 0, 1.6, 2);
+  phoneLight.position.set(-3.0, 1.7, 0.75);
+  scene.add(phoneLight);
+
+  // ── 상점 진열장 (오른쪽 벽) ──
+  const cabinet = new THREE.Group();
+  const cabBody = new THREE.Mesh(new THREE.BoxGeometry(0.6, 2.1, 1.1), mat(0x1c1612));
+  cabBody.position.y = 1.05;
+  const signCanvas = document.createElement('canvas');
+  signCanvas.width = 128; signCanvas.height = 32;
+  const sg = signCanvas.getContext('2d');
+  sg.fillStyle = '#1a0500'; sg.fillRect(0, 0, 128, 32);
+  sg.fillStyle = '#ffb030'; sg.font = 'bold 22px monospace'; sg.textAlign = 'center'; sg.textBaseline = 'middle';
+  sg.fillText('· 상 점 ·', 64, 17);
+  const signTex = new THREE.CanvasTexture(signCanvas);
+  signTex.magFilter = THREE.NearestFilter;
+  signTex.colorSpace = THREE.SRGBColorSpace;
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.95, 0.24), new THREE.MeshBasicMaterial({ map: signTex }));
+  sign.position.set(-0.31, 1.95, 0);
+  sign.rotation.y = -Math.PI / 2;
+  const glass = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.3), new THREE.MeshBasicMaterial({ color: 0x2a3a20, transparent: true, opacity: 0.35 }));
+  glass.position.set(-0.31, 1.1, 0);
+  glass.rotation.y = -Math.PI / 2;
+  cabinet.add(cabBody, sign, glass);
+  // 진열된 칩 더미와 상자들
+  const shelfColors = ['#d9443a', '#3f7fd9', '#f2c14e', '#1c1c1c', '#9fe3f0', '#4fbf72'];
+  for (let row = 0; row < 3; row++) {
+    const shelf = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.95), mat(0x3a2a1a));
+    shelf.position.set(-0.05, 0.6 + row * 0.42, 0);
+    cabinet.add(shelf);
+    for (let k = 0; k < 4; k++) {
+      const item = row === 1
+        ? new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.12), mat(0x6a4a8a))
+        : new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.03 * (2 + k), 10), mat(shelfColors[(row * 4 + k) % shelfColors.length]));
+      item.position.set(-0.1, 0.62 + row * 0.42 + (row === 1 ? 0.08 : 0.015 * (2 + k)), -0.33 + k * 0.22);
+      cabinet.add(item);
+    }
+  }
+  cabinet.position.set(3.05, 0, 0.15);
+  scene.add(cabinet);
+  const cabLight = new THREE.PointLight(0xffb040, 0.6, 3, 1.5);
+  cabLight.position.set(2.5, 1.9, 0.15);
+  scene.add(cabLight);
+
+  // ── 부적 받침 (테이블 위, 왼쪽부터 발동 순서) ──
+  const charmsGroup = new THREE.Group();
+  scene.add(charmsGroup);
+  const charmTexCache = {};
+  function charmTexture(id) {
+    if (charmTexCache[id]) return charmTexCache[id];
+    const def = CHARMS[id];
+    const c = document.createElement('canvas');
+    c.width = 48; c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = def.rare ? '#3a1028' : '#2a2016'; g.fillRect(0, 0, 48, 64);
+    g.strokeStyle = def.rare ? '#ff8ac6' : '#c9a24a'; g.lineWidth = 3; g.strokeRect(2, 2, 44, 60);
+    g.font = '24px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(def.icon, 24, 26);
+    g.fillStyle = '#efe3c8'; g.font = 'bold 9px sans-serif';
+    g.fillText(def.name, 24, 52);
+    const tex = new THREE.CanvasTexture(c);
+    tex.magFilter = THREE.NearestFilter;
+    tex.colorSpace = THREE.SRGBColorSpace;
+    charmTexCache[id] = tex;
+    return tex;
+  }
+  let charmMeshes = [];
+  const slotMat = new THREE.MeshBasicMaterial({ color: 0x0f2a20 });
+  function rebuildCharms(charms) {
+    charmsGroup.clear();
+    charmMeshes = [];
+    const spacing = 0.21;
+    for (let i = 0; i < CONFIG.maxCharms; i++) {
+      const x = (i - (CONFIG.maxCharms - 1) / 2) * spacing;
+      const slot = new THREE.Mesh(new THREE.PlaneGeometry(0.17, 0.08), slotMat);
+      slot.rotation.x = -Math.PI / 2;
+      slot.position.set(x, 0.942, 0.12);
+      charmsGroup.add(slot);
+      const id = charms[i];
+      if (!id) continue;
+      const plaque = new THREE.Mesh(new THREE.BoxGeometry(0.15, 0.2, 0.025), [
+        mat(0x2a2016), mat(0x2a2016), mat(0x2a2016), mat(0x2a2016),
+        new THREE.MeshStandardMaterial({ map: charmTexture(id), roughness: 0.7 }), mat(0x2a2016),
+      ]);
+      plaque.position.set(x, 1.045, 0.12);
+      plaque.rotation.x = -0.35;
+      plaque.castShadow = true;
+      plaque.userData = { kind: 'charm', id, index: i };
+      charmsGroup.add(plaque);
+      charmMeshes.push(plaque);
+    }
+  }
 
   // ── 산탄총 (총구가 +z 방향이라 lookAt으로 조준) ──
   const gun = new THREE.Group();
@@ -267,7 +465,7 @@ export function createScene(canvas, { onChipClick, onHurt } = {}) {
       m.position.set(x0 + i * spacing, sel ? 1.06 : 0.96, 0.42);
       m.rotation.x = sel ? 0.6 : 0;
       m.castShadow = true;
-      m.userData.index = i;
+      m.userData = { kind: 'chip', id: chip.type, index: i };
       chipsGroup.add(m);
       chipMeshes.push(m);
     });
@@ -310,6 +508,9 @@ export function createScene(canvas, { onChipClick, onHurt } = {}) {
     anims.push({ start: now + delay, dur, fn });
   }
   let shake = 0;
+  let dealerTurn = false;
+  let leanK = 0;
+  const hitJolt = { z: 0, x: 0 };
   let hurtGlow = 0;
 
   function animShot(t, e) {
@@ -355,9 +556,9 @@ export function createScene(canvas, { onChipClick, onHurt } = {}) {
   }
 
   function animDealerHit(t) {
-    tween(t, 500, (k) => {
-      dealer.position.z = -1.55 - Math.sin(k * Math.PI) * 0.18;
-      dealer.rotation.x = -Math.sin(k * Math.PI) * 0.12;
+    tween(t, 600, (k) => {
+      hitJolt.z = -Math.sin(k * Math.PI) * 0.25;
+      hitJolt.x = -Math.sin(k * Math.PI) * 0.5;
       headMat.emissive.setRGB(0.8 * (1 - k), 0, 0);
     });
   }
@@ -387,11 +588,34 @@ export function createScene(canvas, { onChipClick, onHurt } = {}) {
     return t;
   }
 
+  let ringing = false;
+  function moveCamera(next) {
+    const fromPos = camPos.clone(), fromLook = camLook.clone();
+    const portrait = canvas.clientWidth / canvas.clientHeight < 0.8;
+    // 세로 화면에서는 상점 패널이 아래에 깔리므로 진열장을 정면 위쪽에 둔다
+    const to = next === 'shop' && portrait
+      ? { pos: new THREE.Vector3(0.2, 1.75, 0.6), look: new THREE.Vector3(3.05, 0.95, 0.15) }
+      : POSES[next];
+    pose = next;
+    tween(0, 1000, (k) => {
+      const e = easeInOut(k);
+      camPos.lerpVectors(fromPos, to.pos, e);
+      camPos.y += Math.sin(k * Math.PI) * 0.15; // 일어서는 느낌
+      camLook.lerpVectors(fromLook, to.look, e);
+    });
+  }
+
   function update(state, { selectedChip = null } = {}) {
     rebuildShells(state.duel);
     rebuildChips(state.player.pouch, selectedChip);
     drawMonitor(state);
-    eyeMat.color.setHex(state.phase === 'dealer' ? 0xff6a2a : 0xff2a1a);
+    dealerTurn = state.phase === 'dealer';
+    rebuildCharms(state.player.charms);
+    const want = state.phase === 'call' ? 'phone'
+      : state.phase === 'shop' ? 'shop'
+      : state.phase === 'gameOver' && state.result?.reason === 'dead' ? 'dead' : 'table';
+    if (want !== pose) moveCamera(want);
+    ringing = state.phase === 'call';
   }
 
   // ── 입력: 칩 클릭 ──
@@ -404,10 +628,27 @@ export function createScene(canvas, { onChipClick, onHurt } = {}) {
     raycaster.setFromCamera(pointer, camera);
     const hit = raycaster.intersectObjects(chipMeshes)[0];
     if (hit) onChipClick?.(hit.object.userData.index);
+    else {
+      const ch = raycaster.intersectObjects(charmMeshes)[0];
+      if (ch) onHover?.(ch.object.userData, ev.clientX, ev.clientY);
+    }
   });
+  let hovered = null;
   window.addEventListener('pointermove', (ev) => {
     look.x = (ev.clientX / window.innerWidth) * 2 - 1;
     look.y = (ev.clientY / window.innerHeight) * 2 - 1;
+    if (ev.target !== canvas) return;
+    const r = canvas.getBoundingClientRect();
+    pointer.set(((ev.clientX - r.left) / r.width) * 2 - 1, -((ev.clientY - r.top) / r.height) * 2 + 1);
+    raycaster.setFromCamera(pointer, camera);
+    const hit = raycaster.intersectObjects([...chipMeshes, ...charmMeshes])[0];
+    const info = hit ? hit.object.userData : null;
+    const key = info ? `${info.kind}:${info.index}` : null;
+    if (key !== hovered) {
+      hovered = key;
+      canvas.style.cursor = info?.kind === 'chip' ? 'pointer' : 'default';
+      onHover?.(info, ev.clientX, ev.clientY);
+    }
   });
 
   // ── 크기 / 루프 ──
@@ -443,15 +684,39 @@ export function createScene(canvas, { onChipClick, onHurt } = {}) {
     const tt = now / 1000;
     shake *= 0.9;
     hurtGlow *= 0.94;
+    const sway = pose === 'table' ? 1 : 0.3;
     camera.position.set(
-      camBase.x + look.x * 0.12 + (Math.random() - 0.5) * shake,
-      camBase.y + Math.sin(tt * 1.3) * 0.01 - look.y * 0.05 + (Math.random() - 0.5) * shake,
-      camBase.z,
+      camPos.x + look.x * 0.12 * sway + (Math.random() - 0.5) * shake,
+      camPos.y + Math.sin(tt * 1.3) * 0.01 - look.y * 0.05 * sway + (Math.random() - 0.5) * shake,
+      camPos.z,
     );
-    camera.lookAt(lookBase.x + look.x * 0.3, lookBase.y - look.y * 0.15, lookBase.z);
+    camera.lookAt(camLook.x + look.x * 0.3 * sway, camLook.y - look.y * 0.15 * sway, camLook.z);
+    // 전화벨: 수화기가 덜덜 떨리고 빨간 불이 깜빡인다
+    if (ringing) {
+      const on = Math.sin(tt * 30) > 0 && (tt % 1.2) < 0.8;
+      handset.position.y = 0.05 + (on ? (Math.random() - 0.5) * 0.02 : 0);
+      handset.rotation.x = on ? (Math.random() - 0.5) * 0.15 : 0;
+      phoneLight.intensity = on ? 0.7 : 0.2;
+      for (const b of bells) b.position.x = 0.07 + (on ? (Math.random() - 0.5) * 0.015 : 0);
+      bell.material.color.setHex(on ? 0xff2010 : 0x330000);
+    } else {
+      phoneLight.intensity = 0;
+      bell.material.color.setHex(0x330000);
+    }
     // 딜러 숨쉬기
-    head.rotation.y = Math.sin(tt * 0.7) * 0.15;
-    head.position.y = 1.97 + Math.sin(tt * 1.1) * 0.01;
+    // 갑자기 고개를 꺾는 경련 + 느린 숨쉬기
+    if (Math.random() < 0.006) { twitch.z = (Math.random() - 0.5) * 0.7; twitch.y = (Math.random() - 0.5) * 0.6; twitch.t = 1; }
+    twitch.t *= 0.965;
+    head.rotation.z += ((twitch.z * twitch.t) - head.rotation.z) * 0.35;
+    head.rotation.y = Math.sin(tt * 0.6) * 0.12 + twitch.y * twitch.t;
+    head.position.y = 2.02 + Math.sin(tt * 1.1) * 0.012;
+    const lean = dealerTurn ? 1 : 0;
+    leanK += (lean - leanK) * 0.05;
+    dealer.position.z = -1.55 + leanK * 0.22 + hitJolt.z;
+    head.rotation.x = leanK * 0.25 + hitJolt.x;
+    pupilMat.color.setRGB(1, 0.14 + Math.random() * 0.1 * leanK, 0.08);
+    const pupilScale = 1 + leanK * 0.6 + (Math.random() < 0.02 ? 1 : 0);
+    for (const pp of pupils) pp.scale.setScalar(pupilScale);
     renderer.render(scene, camera);
   });
 

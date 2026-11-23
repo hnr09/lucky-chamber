@@ -2,17 +2,18 @@
 import { newRun, act } from '../core/engine.js';
 import { CONFIG } from '../core/config.js';
 import { CHARMS, maxHp } from '../core/charms.js';
-import { CHIPS } from '../core/chips.js';
+import { CHIPS, betText } from '../core/chips.js';
 import { ITEMS } from '../core/items.js';
 import { AUGMENTS } from '../core/augments.js';
 import { describe } from './describe.js';
-import { renderShop, renderCall, renderEnd } from './panels.js';
+import { renderShop, renderCall, renderEnd, renderPaytable } from './panels.js';
 import { createScene } from './scene3d.js';
 
 const params = new URLSearchParams(location.search);
 const FAST = params.has('fast');
 const app = document.getElementById('app');
 const hurtEl = document.getElementById('hurt');
+const tipEl = document.getElementById('tip');
 
 let state;
 let log = [];
@@ -20,17 +21,34 @@ let flash = null;
 let toast = '';
 let selectedChip = null;
 let showLog = false;
+let showPay = window.innerWidth > 1000;
 let lockedUntil = 0;   // 연출 중에는 입력을 막는다
 let timer = null;
 
 const scene = createScene(document.getElementById('scene'), {
   onChipClick: (i) => selectChip(i),
+  onHover: (info, x, y) => showTip(info, x, y),
   onHurt: () => {
     hurtEl.classList.remove('on');
     void hurtEl.offsetWidth;
     hurtEl.classList.add('on');
   },
 });
+
+// 테이블 위 칩/부적에 마우스를 올리면 설명 표시
+function showTip(info, x, y) {
+  if (!info) { tipEl.hidden = true; return; }
+  if (info.kind === 'chip') {
+    const c = CHIPS[info.id];
+    tipEl.innerHTML = `<b style="color:${c.color}">${c.icon} ${c.name}</b><div class="bet">${betText(c.bet)}</div>${c.ability ? `<div>${c.ability}</div>` : ''}<small>클릭해서 베팅</small>`;
+  } else {
+    const c = CHARMS[info.id];
+    tipEl.innerHTML = `<b>${c.icon} ${c.name}</b><div>${c.desc}</div><small>${info.index + 1}번째로 발동</small>`;
+  }
+  tipEl.style.left = `${Math.min(x + 14, window.innerWidth - 230)}px`;
+  tipEl.style.top = `${Math.max(8, y - 70)}px`;
+  tipEl.hidden = false;
+}
 
 function start(seed) {
   clearTimeout(timer);
@@ -118,7 +136,7 @@ function render() {
       <div class="bar"><i style="width:${pct}%" class="${pct >= 100 ? 'met' : ''}"></i></div>
       <div class="dealer-hp"><small>딜러</small>${pips(dealer.hp, dealer.maxHp, 'hp dealer')}</div>
     </div>
-  <div class="plate formula">
+  <div class="plate formula ${state.phase === 'call' || state.phase === 'shop' ? 'away' : ''}">
     <span class="stake">${CONFIG.baseHitStake + p.mods.baseStake}${sel ? '+' : ''}</span><span class="x">×</span><span class="mult">${d.heat}</span>
     <small>장전 #${d.chamberNo} · 실탄 ${d.loaded.live} · 공포탄 ${d.loaded.blank} · 남은 ${d.shells.length}${d.empowered ? ' · 💥강화' : ''}</small>
   </div>
@@ -127,14 +145,13 @@ function render() {
 
   ${renderFlash()}
 
-  <section class="hud-bottom">
+  <section class="hud-bottom ${state.phase === 'call' || state.phase === 'shop' ? 'away' : ''}">
 
     <div class="charm-row">
-      ${p.charms.map((id) => `<span class="charm" title="${CHARMS[id].name}: ${CHARMS[id].desc}">${CHARMS[id].icon}</span>`).join('')}
       ${p.augments.map((id) => `<span class="aug" title="${AUGMENTS[id].name}: ${AUGMENTS[id].desc}">${AUGMENTS[id].icon}</span>`).join('')}
     </div>
     <p class="chip-desc">${sel
-      ? `<b style="color:${CHIPS[sel.type].color}">${CHIPS[sel.type].icon} ${CHIPS[sel.type].name}</b> ${CHIPS[sel.type].desc}`
+      ? `<b style="color:${CHIPS[sel.type].color}">${CHIPS[sel.type].icon} ${CHIPS[sel.type].name}</b> <span class="bet">${betText(CHIPS[sel.type].bet)}</span>${CHIPS[sel.type].ability ? ` · ${CHIPS[sel.type].ability}` : ''}`
       : state.phase === 'dealer' ? '<span class="wait">딜러가 총을 집어 든다…</span>'
       : `테이블의 칩을 눌러 베팅 · 주머니 ${p.pouch.draw.length} · 버림 ${p.pouch.discard.length}`}</p>
     <div class="controls">
@@ -152,17 +169,19 @@ function render() {
       </div>
     </div>
     <div class="actions">
-      <button class="shoot dealer-btn" data-act="shoot" data-target="dealer" ${busy ? 'disabled' : ''}>딜러를 쏜다</button>
-      <button class="shoot self-btn" data-act="shoot" data-target="self" ${busy ? 'disabled' : ''}>나를 쏜다</button>
+      <button class="shoot dealer-btn" data-act="shoot" data-target="dealer" ${busy ? 'disabled' : ''}>딜러를 쏜다<small>실탄이면 득점 · 턴 넘김</small></button>
+      <button class="shoot self-btn" data-act="shoot" data-target="self" ${busy ? 'disabled' : ''}>나를 쏜다<small>공포탄이면 열기 +1 · 턴 유지</small></button>
     </div>
     ${toast ? `<p class="toast">${toast}</p>` : ''}
     <div class="meta">
+      <button class="link" data-act="togglePay">${showPay ? '배당표 닫기' : '📋 배당표'}</button>
       <button class="link" data-act="toggleLog">${showLog ? '기록 닫기' : '기록'}</button>
       <span>시드 ${state.seed}</span>
       <button class="link" data-act="restart">새 게임</button>
     </div>
   </section>
 
+  ${showPay && (state.phase === 'player' || state.phase === 'dealer') ? renderPaytable(state) : ''}
   ${showLog ? `<section class="log">${log.slice().reverse().map((l) => `<div class="l-${l.type}">${l.text}</div>`).join('')}</section>` : ''}
 
   ${state.phase === 'call' ? renderCall(state) : ''}
@@ -190,6 +209,7 @@ app.addEventListener('click', (ev) => {
   if (type === 'restart') return start();
   if (type === 'retry') return start(state.seed);
   if (type === 'toggleLog') { showLog = !showLog; return render(); }
+  if (type === 'togglePay') { showPay = !showPay; return render(); }
   if (type === 'removeChip') return dispatch({ type, chipType: chip });
   if ((type === 'shoot' || type === 'useItem') && locked()) return;
   dispatch({ type, target, index: index !== undefined ? Number(index) : undefined, dir: dir !== undefined ? Number(dir) : undefined });

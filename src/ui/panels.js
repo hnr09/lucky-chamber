@@ -1,7 +1,7 @@
 // 오버레이 패널: 상점 / 전화 / 게임 종료
 import { CONFIG, stageSpec } from '../core/config.js';
 import { CHARMS } from '../core/charms.js';
-import { CHIPS, allChips } from '../core/chips.js';
+import { CHIPS, allChips, betText } from '../core/chips.js';
 import { ITEMS } from '../core/items.js';
 import { GLYPH } from '../core/reels.js';
 import { sellPrice, priceOf } from '../core/shop.js';
@@ -12,7 +12,7 @@ export function renderShop(state, toast) {
   const { shop: s, player: p } = state;
   const next = stageSpec(state.stage + 1);
   const spin = s.lastSpin;
-  return `<div class="overlay"><div class="panel shop">
+  return `<div class="overlay stand shop-wrap"><div class="panel shop">
     <h2>상점 <small>코인 <b class="coin">${p.coins}</b> · 티켓 <b class="ticket">${p.tickets}</b></small></h2>
     <p class="sub">다음: 스테이지 ${state.stage + 1} · 할당량 ${next.quota} · 딜러 체력 ${next.dealerHp}</p>
 
@@ -40,12 +40,12 @@ export function renderShop(state, toast) {
       const c = CHIPS[id];
       const price = priceOf(state, c.price);
       return `<button class="card small" data-act="buyChip" data-index="${i}" ${p.coins < price ? 'disabled' : ''}>
-        <span class="ic token-lg" style="--c:${c.color}">${c.icon}</span><b>${c.name}</b><small>${c.desc}</small><em>${price} 코인</em></button>`;
+        <span class="ic token-lg" style="--c:${c.color}">${c.icon}</span><b>${c.name}</b><small class="bet">${betText(c.bet)}</small>${c.ability ? `<small>${c.ability}</small>` : ''}<em>${price} 코인</em></button>`;
     }).join('')}</div>
 
     <h3>내 칩 주머니 <small>${allChips(p.pouch).length}개 · 제거 ${CONFIG.shop.removeChipCost} 코인 (최소 ${CONFIG.minPouch}개)</small></h3>
     <div class="pouch">${Object.entries(countChips(p.pouch)).map(([type, n]) => `
-      <div class="pouch-row" title="${CHIPS[type].desc}"><span>${CHIPS[type].icon} ${CHIPS[type].name} ×${n}</span>
+      <div class="pouch-row"><span>${CHIPS[type].icon} ${CHIPS[type].name} ×${n} <small class="bet">${betText(CHIPS[type].bet)}</small>${CHIPS[type].ability ? ` <small>${CHIPS[type].ability}</small>` : ''}</span>
         <button data-act="removeChip" data-chip="${type}">제거</button></div>`).join('')}</div>
 
     <h3>🎟️ 티켓 부스 <small>희귀 부적 · 영구 강화</small></h3>
@@ -80,7 +80,7 @@ export function renderShop(state, toast) {
 }
 
 export function renderCall(state) {
-  return `<div class="overlay"><div class="panel call">
+  return `<div class="overlay stand call-wrap"><div class="panel call">
     <h2>📞 따르릉…</h2>
     <p class="sub">수화기 너머 목소리가 거래를 제안한다. 하나를 고르면 이번 판 내내 유지된다.</p>
     <div class="cards">${state.call.offers.map((id, i) => {
@@ -107,4 +107,20 @@ export function renderEnd(state) {
       <button class="primary" data-act="restart">새 게임</button>
     </div>
   </div></div>`;
+}
+
+// 배당표: 내 칩 주머니에 있는 칩 종류별 베팅 배당과 능력
+export function renderPaytable(state) {
+  const counts = countChips(state.player.pouch);
+  const rows = Object.keys(CHIPS).filter((t) => counts[t]).map((t) => {
+    const c = CHIPS[t];
+    return `<tr><td><span class="dot" style="--c:${c.color}"></span>${c.icon}</td>
+      <td><b>${c.name}</b> ×${counts[t]}${c.ability ? `<div class="abil">${c.ability}</div>` : ''}</td>
+      <td class="bet">${betText(c.bet).replace(/ · /g, '<br>')}</td></tr>`;
+  }).join('');
+  return `<aside class="paytable">
+    <h4>배당표 <small>건 칩 → 부적 순서로 계산</small></h4>
+    <table>${rows}</table>
+    <p class="rule">득점 = 판돈 × 배수<br>딜러 적중 판돈 ${CONFIG.baseHitStake + state.player.mods.baseStake} · 자신 공포탄 판돈 ${CONFIG.selfBlankStake}<br>배수 = 현재 열기 ${state.duel.heat}</p>
+  </aside>`;
 }

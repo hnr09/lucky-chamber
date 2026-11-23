@@ -129,3 +129,26 @@ test('상점: 칩 구매/제거', () => {
   assert.ok(whites === 0 || allChips(s.player.pouch).length === CONFIG.minPouch);
   assert.ok(allChips(s.player.pouch).length >= CONFIG.minPouch);
 });
+
+test('베팅 배당은 자신에게 쏜 공포탄 득점에도 적용된다', () => {
+  const s = rigged([false, true, true], { hand: ['red'] });
+  shoot(s, 'self', 0);
+  assert.equal(s.duel.score, (5 + 20) * 2);
+});
+
+test('블루 칩: 배당 배수 +1 + 능력 열기 +1', () => {
+  const s = rigged([false, true, true], { hand: ['blue'] });
+  const ev = shoot(s, 'self', 0);
+  const sc = lastOf(ev, 'score');
+  assert.equal(s.duel.heat, 3);
+  assert.equal(sc.mult, 4);
+  assert.equal(sc.points, 5 * 4);
+});
+
+test('모든 칩은 배당표 설명을 가진다', async () => {
+  const { CHIPS } = await import('../src/core/chips.js');
+  for (const [id, c] of Object.entries(CHIPS)) {
+    assert.ok(c.bet, id);
+    assert.ok(c.desc.length > 0, id);
+  }
+});
