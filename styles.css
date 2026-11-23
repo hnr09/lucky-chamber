@@ -316,3 +316,27 @@ i.hp.me.on { background: var(--green); box-shadow: 0 0 6px var(--green); }
 #fx { position: fixed; inset: 0; pointer-events: none; z-index: 45; }
 /* 전화 패널은 클리어 연출 → 일어서기가 끝난 뒤에 */
 .overlay.call-wrap { animation-delay: 2.9s; }
+
+/* ── 설명서 ── */
+.manual-wrap { z-index: 55; background: #000c; }
+.panel.manual { max-width: 620px; margin-top: 6vh; }
+.manual-head { display: flex; justify-content: space-between; align-items: center; }
+.manual-head .x { background: none !important; border: none !important; box-shadow: none !important; font-size: 18px; color: var(--muted); }
+.dots { display: flex; gap: 4px; flex-wrap: wrap; margin: 8px 0 4px; }
+.panel .dot { font-size: 11px; padding: 3px 8px !important; opacity: .6; }
+.panel .dot.on { opacity: 1; border-color: var(--gold) !important; color: var(--gold); }
+.manual h3 { font-size: 20px !important; color: #e8c06a !important; }
+.manual-body { font-size: 14px; line-height: 1.7; min-height: 220px; }
+.manual-body ul { padding-left: 20px; margin: 6px 0; }
+.manual-body li { margin-bottom: 4px; }
+.manual-body b { color: #f3e6d2; }
+.manual-body code { background: #000; padding: 1px 6px; border: 1px solid #3a1c14; color: var(--green); }
+.manual-body .lead { font-size: 16px; }
+.manual-body .tip { background: #0008; border-left: 3px solid var(--gold); padding: 6px 10px; font-size: 13px; }
+.manual-body .two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 10px 0; }
+.manual-body .box { padding: 10px; border: 2px solid #3a1c14; font-size: 13px; line-height: 1.6; }
+.manual-body .box.red { background: linear-gradient(#4a120e, #2a0806); }
+.manual-body .box.dark { background: linear-gradient(#262422, #121110); }
+.manual-body .formula-big { text-align: center; font-family: var(--display); font-size: 26px; margin: 10px 0 14px; }
+.manual-body .formula-big span { padding: 2px 12px; }
+@media (max-width: 480px) { .manual-body .two { grid-template-columns: 1fr; } .manual-body { font-size: 13px; } }

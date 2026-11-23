@@ -7,7 +7,9 @@ import { ITEMS } from '../core/items.js';
 import { AUGMENTS } from '../core/augments.js';
 import { describe } from './describe.js';
 import { renderShop, renderCall, renderEnd, renderPaytable } from './panels.js';
+import { renderManual, MANUAL_PAGES } from './manual.js';
 import { createScene } from './scene3d.js';
+import { initAudio, playEvents, sfx, toggleMute, isMuted } from './audio.js';
 
 const params = new URLSearchParams(location.search);
 const FAST = params.has('fast');
@@ -23,8 +25,15 @@ let toast = '';
 let selectedChips = []; // 고른 손패 인덱스 (고른 순서 = 발동 순서)
 let showLog = false;
 let showPay = window.innerWidth > 1000;
+// 설명서: 처음 실행하면 자동으로 연다 (?skipmanual 이나 ?fast 면 건너뜀)
+let manualSeen = false;
+try { manualSeen = localStorage.getItem('lc-manual-seen') === '1'; } catch { /* 저장소 없음 */ }
+let showManual = !manualSeen && !params.has('skipmanual') && !params.has('fast');
+let manualPage = 0;
 let lockedUntil = 0;   // 연출 중에는 입력을 막는다
 let timer = null;
+
+initAudio();
 
 const scene = createScene(document.getElementById('scene'), {
   onChipClick: (i) => selectChip(i),
@@ -64,6 +73,7 @@ function start(seed) {
   record(r.events);
   refresh();
   scene.play(r.events);
+  playEvents(r.events, { state });
 }
 
 function locked() {
@@ -72,9 +82,9 @@ function locked() {
 
 function selectChip(i) {
   if (state.phase !== 'player' || locked() || !state.player.pouch.hand[i]) return;
-  if (selectedChips.includes(i)) selectedChips = selectedChips.filter((x) => x !== i);
-  else if (selectedChips.length < betSlots(state)) selectedChips = [...selectedChips, i];
-  else { toast = `한 번에 최대 ${betSlots(state)}개까지 걸 수 있다`; return render(); }
+  if (selectedChips.includes(i)) { selectedChips = selectedChips.filter((x) => x !== i); sfx.select(false); }
+  else if (selectedChips.length < betSlots(state)) { selectedChips = [...selectedChips, i]; sfx.select(true); }
+  else { toast = `한 번에 최대 ${betSlots(state)}개까지 걸 수 있다`; sfx.deny(); return render(); }
   toast = '';
   refresh();
 }
@@ -98,6 +108,7 @@ function dispatch(action) {
   const quota = state.duel?.quota ?? 1;
   const jackpot = sc ? (sc.points >= quota * 3 ? 3 : sc.points >= quota ? 2 : sc.points >= quota * 0.5 ? 1 : 0) : 0;
   if (jackpot && !FAST) scene.celebrate(jackpot, shot ? 650 : 0);
+  playEvents(events, { jackpot, state });
   const clear = events.find((e) => e.type === 'stageClear');
   const showFlash = () => {
     if (shot || sc || clear) {
@@ -198,8 +209,10 @@ function render() {
     </div>
     ${toast ? `<p class="toast">${toast}</p>` : ''}
     <div class="meta">
+      <button class="link" data-act="openManual">📖 설명서</button>
       <button class="link" data-act="togglePay">${showPay ? '배당표 닫기' : '📋 배당표'}</button>
       <button class="link" data-act="toggleLog">${showLog ? '기록 닫기' : '기록'}</button>
+      <button class="link" data-act="toggleMute">${isMuted() ? '🔇 소리 켜기' : '🔊 소리'}</button>
       <span>시드 ${state.seed}</span>
       <button class="link" data-act="restart">새 게임</button>
     </div>
@@ -208,6 +221,7 @@ function render() {
   ${showPay && (state.phase === 'player' || state.phase === 'dealer') ? renderPaytable(state) : ''}
   ${showLog ? `<section class="log">${log.slice().reverse().map((l) => `<div class="l-${l.type}">${l.text}</div>`).join('')}</section>` : ''}
 
+  ${showManual ? renderManual(manualPage, { firstTime: !manualSeen }) : ''}
   ${state.phase === 'call' ? renderCall(state) : ''}
   ${state.phase === 'shop' ? renderShop(state, toast) : ''}
   ${state.phase === 'gameOver' || state.phase === 'victory' ? renderEnd(state) : ''}
@@ -241,7 +255,19 @@ app.addEventListener('click', (ev) => {
   if (type === 'restart') return start();
   if (type === 'retry') return start(state.seed);
   if (type === 'toggleLog') { showLog = !showLog; return render(); }
-  if (type === 'togglePay') { showPay = !showPay; return render(); }
+  if (type === 'togglePay') { showPay = !showPay; sfx.click(); return render(); }
+  if (type === 'toggleMute') { toggleMute(); return render(); }
+  if (type === 'openManual') { showManual = true; manualPage = 0; sfx.click(); return render(); }
+  if (type === 'manualNext') { manualPage = Math.min(MANUAL_PAGES - 1, manualPage + 1); sfx.click(); return render(); }
+  if (type === 'manualPrev') { manualPage = Math.max(0, manualPage - 1); sfx.click(); return render(); }
+  if (type === 'manualGo') { manualPage = Number(index); sfx.click(); return render(); }
+  if (type === 'manualClose') {
+    showManual = false;
+    manualSeen = true;
+    try { localStorage.setItem('lc-manual-seen', '1'); } catch { /* 저장소 없음 */ }
+    sfx.click();
+    return render();
+  }
   if (type === 'removeChip') return dispatch({ type, chipType: chip });
   if ((type === 'shoot' || type === 'useItem') && locked()) return;
   dispatch({ type, target, index: index !== undefined ? Number(index) : undefined, dir: dir !== undefined ? Number(dir) : undefined });
@@ -249,6 +275,12 @@ app.addEventListener('click', (ev) => {
 
 // 키보드: 1~9 칩 선택(다시 누르면 취소), D 딜러, S 자신
 window.addEventListener('keydown', (ev) => {
+  if (showManual) {
+    if (ev.key === 'ArrowRight' || ev.key === 'Enter') { manualPage < MANUAL_PAGES - 1 ? (manualPage++, render()) : (showManual = false, manualSeen = true, render()); }
+    else if (ev.key === 'ArrowLeft' && manualPage > 0) { manualPage--; render(); }
+    else if (ev.key === 'Escape') { showManual = false; render(); }
+    return;
+  }
   if (state.phase !== 'player' || locked()) return;
   const n = Number(ev.key);
   if (n >= 1 && n <= 9) selectChip(n - 1);
